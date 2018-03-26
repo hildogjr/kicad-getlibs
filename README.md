@@ -1,67 +1,72 @@
 KiCad-GetLibs
 =============
 
-This is a rudimentary python script to help maintain a local copy of the official
-KiCad footprint libraries from GitHub.
+A tool for downloading and installing kiCad packages. May require KiCad v5.
 
-New style KiCad footprint libraries are folders named \*.pretty and are stored
-as separate repos at <https://github.com/kicad>.  You can use them directly from
-GitHub using the GitHub library type, but if you haven't got a permanent internet 
-connection or want them local for some reason there are over 70 to clone individually.
+Runs on Windows, Linux (MacOs might work).
 
-This script uses the GitHub API to:
+Description
+-----------
 
-1. Clone a repository if it is one of the \*.pretty libraries and you don't have it
-2. Pull the repository if you already have it locally (does an update).
-3. Optionally update your fp-lib-table marking the auto-maintained repositories
+Currently supports footprints, symbols and templates. Configurations for KiCad
+official v5 libraries and templates, SparkFun, DigiKey and Walter Lain libraries.
+
+Where available, point releases are downloaded as a zip file. Otherwise, latest
+versions of git repositories are cloned locally.
+
+This script uses git to:
+
+1. Clone a repository if you don't have it
+2. Pull the latest repository if you already have it locally (does an update).
+
+. Footprints can be installed to fp-lib-table.
+. Symbols can be installed to sym-lib-table.
+. Templates are copied to $USER/kicad/template
+. 3dmodels TODO
+. Scripts TODO
+
+Existing xx-lib-table will be saved to xx-lib-table-old.
 
 Usage
 -----
 
-`python kicad-getlibs.py [options] [<local folder>]`
+`python kicad-getlibs.py [options] <package file> [<version>]`
 
-The optional local folder is the folder you want all your local git repositories
-put in.  If you don't provide it the script will try and read the `KISYSMOD` 
-environment variable and use that folder as the destination.  Note that if you
-do specify the folder and don't use absolute URIs when updating fp-lib-table
-the script will assume `KISYSMOD` is set to \<local folder\>.
+Package file contains the packages to download/install.
+Version is a valid version from the package file or "latest".
 
 Options are:
 
 -h, --help  Shows a help screen on the command line
 
--v, --verbose  Shows the git progress for each repository
+-v, --verbose  Shows the verbose messages
 
--q, --quiet  Don't show the repository names as they are tried
+-q, --quiet  Don't show logging
 
--t, --table  Update the fp-lib-table (not done by default)
+-c, --config <local folder>  Configure get-libs
+      The local folder is the folder you want all your local data put in.
 
--a, --absolute  Use the absolute path to each local repository, otherwise a path
-relative to ${KISYSMOD} is used.
+-d, --download Download package data only
 
-The first run will probably copy your existing fp-lib-table to fp-lib-table-old
-and create a new one.  From that point on a special `auto=true` option added to
-each of the automatically added libraries will mark only them for update and
-any additional custom libraries will be kept.
+-i, --install  Install package data into KiCad (implies download)
+
+-u, --uninstall   Uninstall package data from KiCad
+
 
 **Example Usage**
 
-Using KISYSMOD environment variable:
-
-    python kicad-getlibs.py -tv
-
-Specifying a local path manually:
-
-    python kicad-getlibs.py -avt kicad-libs
+    python kicad-getlibs.py -c c:\kicad_data
+    python kicad-getlibs.py -vi kicad-official-libraries-v5.yml
 
 **Dependencies**
 
-It should just run with a standard distribution of python 2.x, there are no
-special libraries used.  You'll need to have git installed and I've only tested
-on Kubuntu 12.04.
+- You need to have git installed
 
-Bugs/Feauture Requests
+Otherwise it should just run with a standard distribution of python 2.x, there
+are no special libraries used.
+
+Bugs/Feature Requests
 ----------------------
 
-Let me know either at <nathan@nathandumont.com> or via [@hairymnstr](https://twitter.com/hairymnstr) on twitter.
+Please raise issue on github.
 

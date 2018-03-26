@@ -1,152 +1,901 @@
 #!/usr/bin/env python
-import urllib2, json, os, sys, getopt, shutil
+import urllib2
+import json
+import os
+import sys
+import glob
+import getopt
+import shutil
+import urllib
+import zipfile
+import hashlib
 from subprocess import Popen
-from fp_lib_table import read_fp_lib_table, write_fp_lib_table
+import yaml
+
+from str_util import *
+from lib_table import read_lib_table, write_lib_table
+
 
 def usage():
-  print """Usage: %s <local folder>
-  
-  Clones/updates all the .pretty repos from the KiCAD github account
-  into the specified local folder.
+    print """Usage: %s [options] <package file> [<version>]
+    
+    Download and install KiCAD data packages.
 
-  Options:
+    Options:
 
-    -h, --help    Print this help and exit
-    -v, --verbose Print full git output for each repository
-    -q, --quiet   Don't print anything at all
-    -t, --table   Update/overwrite ~/.config/kicad/fp-lib-table for the current user.  The 
-                  first run will move fp-lib-table to fp-lib-table-old and 
-                  replace it, auto generated rows will have the option
-                  "auto=true" added.  Future runs will only update/remove rows
-                  marked as auto.  The <local folder> is assumed to be in
-                  environment $KISYSMOD, use -a to force absolute paths.
-    -a, --absolute
-                  The uri for the library will be an absolute path instead of
-                  respecting $KISYSMOD.""" % sys.argv[0]
+        -h, --help      Print this help and exit
+        -v, --verbose   Show verbose messages
+        -q, --quiet     Don't print anything at all
+        -c, --config <local folder>  Configure get-libs
+                        The local folder is the folder you want all your local data put in.
+        -d, --download  Download the specified packages
+        -i, --install   Install package data into KiCad (implies download)
+        -u, --uninstall Uninstall package data from KiCad
 
-try:
-  opts, args = getopt.getopt(sys.argv[1:], "hqvta", ["help", "quiet", "verbose", "table", "absolute"])
-except getopt.GetoptError as err:
-  print str(err)
-  usage()
-  sys.exit(-2)
+    """ % sys.argv[0]
 
-git_output = open("/dev/null", "w")
-git_quiet = False
-update_table = False
-absolute = False
-for o, a in opts:
-  if o in ("-h", "--help"):
-    usage()
-    sys.exit(0)
-  elif o in ("-v", "--verbose"):
-    git_output.close()
-    git_output = None
-  elif o in ("-q", "--quiet"):
-    git_quiet = True
-  elif o in ("-a", "--absolute"):
-    absolute = True
-  elif o in ("-t", "--table"):
-    update_table = True
-  else:
-    print "Unhandled option,", o
-    usage()
-    sys.exit(-2)
+def get_config_path (appname):
+    global user_documents
 
-if len(args) < 1:
-  try:
-    kisysmod = os.environ['KISYSMOD']
-  except KeyError:
-    print "No local folder specified, and couldn't read KISYSMOD environment variable"
-    usage()
-    sys.exit(-2)
-else:
-  kisysmod = args[0]
-
-if not os.path.isdir(kisysmod):
-  os.makedirs(kisysmod)
-
-full_list = []
-page = 1
-while True:
-  req = urllib2.Request('https://api.github.com/users/kicad/repos?page=%d' % page)
-  req.add_header('Accept', 'application/vnd.github.v3+json')
-  req.add_header('User-Agent', 'hairymnstr-kicad-fetcher')
-
-  res = urllib2.urlopen(req)
-
-  repos = json.loads(res.read())
-
-  for repo in repos:
-    full_list.append(repo['clone_url'])
-  
-  if len(repos) < 30:
-    break
-
-  page += 1
-
-for repo in full_list:
-  repo_name = repo.rsplit('/', 1)[1]
-  
-  if repo_name.split(".", 1)[1] == "pretty.git":
-    if os.path.isdir(os.path.join(kisysmod, repo_name.rstrip(".git"))):
-      if not git_quiet:
-        print "Pulling repo", repo_name
-      pr = Popen(["git", "pull"], cwd=os.path.join(kisysmod, repo_name.rstrip(".git")), stdout=git_output)
-      pr.wait()
+    if sys.platform == 'darwin':
+        from AppKit import NSSearchPathForDirectoriesInDomains
+        # http://developer.apple.com/DOCUMENTATION/Cocoa/Reference/Foundation/Miscellaneous/Foundation_Functions/Reference/reference.html#//apple_ref/c/func/NSSearchPathForDirectoriesInDomains
+        # NSApplicationSupportDirectory = 14
+        # NSUserDomainMask = 1
+        # True for expanding the tilde into a fully qualified path
+        appdata = os.path.join(NSSearchPathForDirectoriesInDomains(14, 1, True)[0], appname)
+    elif sys.platform == 'win32':
+        appdata = os.path.join(os.environ['APPDATA'], appname)
+        # e.g. c:\users\bob\Documents
+        user_documents = os.path.join(os.environ['USERPROFILE'], "Documents")
     else:
-      cmd = ["git", "clone", repo]
-      if not git_quiet:
-        print "Cloning repo", repo_name
-      if not git_output == None:
-        # verbose mode
-        cmd.append("-q")
-      pr = Popen(cmd, cwd=kisysmod, stdout=git_output)
-      pr.wait()
-  else:
-    if not git_quiet:
-      print "ignore:", repo_name
+        # ~/.kicad
+        appdata = os.path.expanduser(os.path.join("~", "." + appname))
+    return appdata
+    
 
+def write_list(filename, list):
+    fw = open(filename, "w")
+    for s in list:
+        fw.write(s + "\n")
+    fw.close()
+
+def hash_bytestr_iter(bytesiter, hasher, ashexstr=False):
+    for block in bytesiter:
+        hasher.update(block)
+    return (hasher.hexdigest() if ashexstr else hasher.digest())
+
+def file_as_blockiter(afile, blocksize=65536):
+    with afile:
+        block = afile.read(blocksize)
+        while len(block) > 0:
+            yield block
+            block = afile.read(blocksize)
+
+
+def get_md5_hash (fname):
+    return hash_bytestr_iter(file_as_blockiter(open(fname, 'rb')), hashlib.md5(), True)
+
+def get_sha256_hash (fname):
+    return hash_bytestr_iter(file_as_blockiter(open(fname, 'rb')), hashlib.sha256(), True)
+
+def check_checksum (fname, checksum):
+
+    actual_checksum = "SHA-256:" + get_sha256_hash (fname)
+
+    if checksum != actual_checksum:
+        print "Error: bad hash, expected %s got %s" % ( checksum, actual_checksum)
+        return False
+
+    return True
+
+def get_unzipped(theurl, thedir, checksum):
+    if not os.path.exists (thedir):
+        os.makedirs(thedir)
+
+    name = os.path.join(thedir, 'temp.zip')
+    try:
+        name, hdrs = urllib.urlretrieve(theurl, name)
+    except IOError, e:
+        print "error: Can't retrieve %r to %r: %s" % (theurl, thedir, e)
+        return False
+
+    #print "downloaded %s" % name
+
+    new_name = theurl.rsplit ("/",1)[1]
+    new_name = os.path.join (get_path (name), new_name)
+    os.rename (name, new_name)
+    name = new_name
+
+    # checksum
+    if not check_checksum (name, checksum):
+        #print "Error: bad hash, expected %s got %s" % ( checksum, hash)
+        return False
+    #
+    try:
+        print "Unzipping %s" % name
+        z = zipfile.ZipFile(name)
+    except zipfile.error, e:
+        print "error: Bad zipfile (from %r): %s" % (theurl, e)
+        return False
+    z.extractall(thedir)
+    z.close()
+    return True
+
+
+# get footprints and symbols at specific version from release server
+def get_tagged_version (version):
+    fp_dir = os.path.join(kisysmod, "kicad-footprints-" + version )
+    lib_dir = os.path.join(kisysmod, "kicad-library-" + version )
+    
+    if not os.path.exists (fp_dir):
+        print "Getting footprints for " + version
+        get_unzipped ("http://downloads.kicad-pcb.org/libraries/kicad-footprints-"+version+".zip", kisysmod)
+    else:
+        print "Already got " + fp_dir
+
+    fp_libs = [f for f in os.listdir(fp_dir) if os.path.isdir(os.path.join(fp_dir, f))]
+
+    # symbols
+    if not os.path.exists (lib_dir):
+        print "Getting symbols for " + version
+        get_unzipped ("http://downloads.kicad-pcb.org/libraries/kicad-library-"+version+".zip", kisysmod)
+    else:
+        print "Already got " + lib_dir
+
+    return fp_libs
+
+
+# git latest symbols/footprints via github
+def get_latest():
+
+    if False:
+        # get list of repos
+        print "Getting list of repos from github"
+        full_list = []
+        page = 1
+        while True:
+            req = urllib2.Request('https://api.github.com/users/kicad/repos?page=%d' % page)
+            req.add_header('Accept', 'application/vnd.github.v3+json')
+            req.add_header('User-Agent', 'hairymnstr-kicad-fetcher')
+            res = urllib2.urlopen(req)
+            repos = json.loads(res.read())
+            for repo in repos:
+                full_list.append(repo['clone_url'])
+            if len(repos) < 30:
+                break
+            page += 1
+
+        repos_to_get = []
+        for repo in full_list:
+
+            repo_name = repo.rsplit('/', 1)[1]
+    
+            if repo_name.split(".", 1)[1] == "pretty.git":
+                print repo, repo_name
+                repos_to_get.append(repo)
+            elif  repo_name == "kicad-library.git":
+                repos_to_get.append(repo)
+
+    else:
+        repos_to_get = []
+        repos_to_get.append("https://github.com/KiCad/kicad-footprints.git")
+        repos_to_get.append("https://github.com/KiCad/kicad-symbols.git")
+
+    #  else:
+    #    if not git_quiet:
+    #      print "ignore:", repo_name
+
+    ##
+    write_list(os.path.join(kisysmod, "list.txt"), repos_to_get)
+
+    fp_path = os.path.join(kisysmod, "kicad-footprints" )   # was footprints-latest
+    #if not os.path.isdir(fp_path):
+    #    os.makedirs(fp_path)
+
+    for repo in repos_to_get:
+        repo_name = repo.rsplit('/', 1)[1]
+    
+        name = repo_name.rstrip(".git")
+
+        if repo_name.split(".", 1)[1] == "pretty.git":
+            path = os.path.join(kisysmod, "footprints-latest" )
+            fp_libs.append (name)
+        elif repo_name == "kicad-footprints.git":
+            ##
+            #path = os.path.join(kisysmod, "footprints-latest-v5" )
+            path = kisysmod
+
+        else:
+            path = kisysmod
+            ##name = "library-latest"
+
+        if os.path.isdir(os.path.join(path, name)):
+            if not git_quiet:
+                print "Updating repo", repo_name
+            pr = Popen(["git", "pull"], cwd=os.path.join(path, name), stdout=git_output)
+            pr.wait()
+        else:
+            cmd = ["git", "clone", repo, name]
+            if not git_quiet:
+                print "Cloning repo", repo_name
+            if not git_output == None:
+                # verbose mode
+                cmd.append("-q")
+
+            pr = Popen(cmd, cwd=path, stdout=git_output)
+            pr.wait()
+
+        #
+        if repo_name == "kicad-footprints.git":
+            #os.path.join(kisysmod, "kicad-footprints" )
+
+            for root, dirnames, filenames in os.walk(fp_path):
+                for dirname in dirnames:
+                    if dirname.endswith (".pretty"):
+                        fp_libs.append (dirname)
+
+        elif repo_name == "kicad-symbols.git":
+            for filename in os.listdir(os.path.join(kisysmod, "kicad-symbols")):
+                if filename.endswith (".lib"):
+                    sym_libs.append (filename)
+        
+    return fp_libs, sym_libs
+
+def get_zip (zip_url, target_path, checksum):
+
+    zip_present = False
+
+    if os.path.exists (target_path):
+        zip_files = glob.glob (os.path.join (target_path, "*.zip"))
+        if len(zip_files) > 0:
+            zip_name = zip_files[0]
+            if check_checksum (zip_name, checksum):
+                zip_present = True
+
+    if zip_present:
+        print "Already got " + target_path
+        return True
+    else:
+        if dryrun:
+            print "Would get zip to %s " % target_path
+            return False
+        else:
+            print "Getting zip from " + zip_url
+            return get_unzipped (zip_url, target_path, checksum)
+
+def git_clone_or_update (repo_url, target_path, target_name):
+  
+    repo_name = repo_url.rsplit('/', 1)[1]
+    #name = repo_name.rstrip(".git")
+
+    # path = os.path.join (target_path, "..")
+    # path = target_path
+
+    if os.path.isdir(os.path.join(target_path, target_name)):
+        if dryrun:
+            print "Would update %s" % os.path.join(target_path, target_name)
+        else:
+            if not git_quiet:
+                print "Updating repo", repo_name
+            pr = Popen(["git", "pull"], cwd=os.path.join(target_path, target_name), stdout=git_output)
+            pr.wait()
+    else:
+        if dryrun:
+            print "Would clone repo %s to %s" % (repo_name, os.path.join(target_path, target_name) )
+        else:
+            os.makedirs(target_path)
+
+            cmd = ["git", "clone", repo_url, target_name]
+            if not git_quiet:
+                print "Cloning repo", repo_name
+            if not git_output == None:
+                # verbose mode
+                cmd.append("-q")
+
+            pr = Popen(cmd, cwd=target_path, stdout=git_output)
+            pr.wait()
+
+
+def update_global_fp_table(publisher, version):
+    update_global_table("fp", fp_libs, os.path.join(kisysmod, fp_local), publisher, version)
+
+def update_global_sym_table(publisher, version):
+    update_global_table("sym", sym_libs, os.path.join(kisysmod, "kicad-symbols"), publisher, version)
+
+def update_global_table(table_type, update_libs, package_path, publisher, package, version):
+
+    table_name = table_type + "-lib-table"
+
+    if table_type=="fp":
+        ext = ".pretty"
+    else:
+        ext = ".lib"
+
+    # first purge old entries
+    if os.path.exists(os.path.join(kicad_config, table_name)):
+        libs = read_lib_table(os.path.join(kicad_config, table_name), table_type)
+
+        found_pub = False
+        new_libs = []
+        for lib in libs:
+            if lib['options'].find("publisher=%s" % publisher) > -1:
+                found_pub = True
+                if verbose:
+                    print "remove: " + lib['name']
+
+            elif lib['uri'].find("github.com/KiCad") > -1 or lib['uri'].find("KIGITHUB") > -1 :
+                # todo: KIGITHUB may not be KiCad
+                # remove github/KiCad entries
+                if verbose:
+                    print "remove: " + lib['name']
+
+            elif update_libs.count (lib['name']+ext) > 0 :
+                if verbose:
+                    print "remove: " + lib['name']
+
+            else:
+                if verbose:
+                    print "keep  : " + lib['name']
+                new_libs.append(lib)
+
+        # todo : create numbered backup
+        # only backup on change?
+        backup_name = table_name + "-old"
+        if dryrun:
+            print "Would replace %s, old one will be stored at %s" % (table_name, os.path.join(kicad_config, backup_name) )
+        else:
+            print "Replacing %s, old one will be stored at %s" % (table_name, os.path.join(kicad_config, backup_name) )
+            shutil.copy2(os.path.join(kicad_config, table_name), 
+                        os.path.join(kicad_config, backup_name))
+
+    else:
+        print "No %s found, creating from scratch" % table_name
+        new_libs = []
+
+    # now add the new libs to the list
+    for lib_name in update_libs:
+        if lib_name.find(ext) > -1:
+            lib = {}
+            #lib['name'] = repo.rsplit('/', 1)[1].split(".")[0]
+            lib['name'] = get_filename_without_extension(lib_name)
+            if table_type == "fp":
+                lib['type'] = u'KiCad'
+            else:
+                lib['type'] = u'Legacy'
+            if absolute:
+                lib['uri'] = os.path.abspath(os.path.join(package_path, lib['name'] + ext))
+            else:
+                lib['uri'] = "${KISYSMOD}/" + lib['name'] + ext
+            lib['options'] = u'publisher=%s|package=%s|version=%s' % (publisher, package, version)
+            lib['descr'] = u'""'
+
+            if verbose:
+                print "Insert: ", lib_name
+            new_libs.append(lib)
+
+    # finally, save the new lib-table
+    if not dryrun:
+        write_lib_table(os.path.join(kicad_config, table_name), table_type, new_libs)
+
+
+def copy_3d_files (source_path, dest_path):
+
+    files = []
+    for root, dirnames, filenames in os.walk(source_path):
+        for filename in filenames:
+            if filename.endswith (".wrl") or filename.endswith (".step"):
+                files.append (os.path.join (root, filename))
+
+    copy_files (files, source_path, dest_path)
+
+
+
+def recursive_copy_files(source_path, destination_path, overwrite=False):
+    """
+    Recursive copies files from source  to destination directory.
+    :param source_path: source directory
+    :param destination_path: destination directory
+    :param overwrite if True all files will be overridden otherwise skip if file exist
+    :return: count of copied files
+    """
+    files_count = 0
+    if not os.path.exists(destination_path):
+        os.mkdir(destination_path)
+    items = glob.glob(source_path + os.sep + '*')
+    for item in items:
+        if os.path.isdir(item):
+            path = os.path.join(destination_path, item.split(os.sep)[-1])
+            files_count += recursive_copy_files(source_path=item, destination_path=path, overwrite=overwrite)
+        else:
+            file = os.path.join(destination_path, item.split(os.sep)[-1])
+            if not os.path.exists(file) or overwrite:
+
+                if dryrun:
+                    print "Would copy %s to %s" % (item, file)
+                else:
+                    shutil.copyfile(item, file)
+
+                files_count += 1
+    return files_count
+
+
+
+def copy_files (files, source_path, dest_path):
+
+    if not os.path.exists (dest_path):
+        if dryrun:
+            print "Would create %s " % dest_path
+        else:
+            os.makedirs(dest_path)
+
+    for filename in files:
+        rel_path = os.path.relpath(filename, source_path)
+
+        dest_file = os.path.join (dest_path, rel_path)
+            
+        dir = os.path.dirname (dest_file)
+        if not os.path.exists (dir):
+            if dryrun:
+                print "Would create %s " % dir
+            else:
+                os.makedirs(dir)
+
+        if dryrun:
+            # print "Would copy %s to %s" % (filename, dest_file)
+            pass
+        else:
+            if verbose:
+                print "copying %s to %s" % (filename, dest_file)
+            shutil.copy2 (filename, dest_file)
+
+def copy_folders (folders, source_path, dest_path):
+
+    if not os.path.exists (dest_path):
+        if dryrun:
+            print "Would create %s " % dest_path
+        else:
+            os.makedirs(dest_path)
+
+    for folder in folders:
+        rel_path = os.path.relpath(folder, source_path)
+        #print  rel_path
+
+        #dest = os.path.join (dest_path, folder[len(source_path)+1:])
+        dest = os.path.join (dest_path, rel_path)
+
+        #
+        print "copy %s to %s" % (folder, dest)
+        recursive_copy_files (folder, dest, True)
+
+"""
+footprint   (.pretty)
+symbol      (.lib)
+3dmodel     (.step, .wrl)
+template    (folder containg .pro)
+script      (.py)
+
+worksheet file   (.wks)
+
+bom script       (.py, .xsl)
+footprint wizard (.py)
+action plugin    (.py)
+other script?    (.py)
+"""
+
+def get_filename (file_path):
+    path, filename = os.path.split (file_path)
+    return filename
+
+def get_filename_without_extension (file_path):
+    path, filename = os.path.split (file_path)
+    basename = os.path.splitext (filename)[0]
+    return basename
+
+def get_path (file_path):
+    path, filename = os.path.split (file_path)
+    return path
+
+
+def get_libs (target_path, file_spec, filter, find_dirs):
+    libs = []
+    if filter == "*/*":
+        if find_dirs:
+            for root, dirnames, filenames in os.walk(target_path):
+                for dirname in dirnames:
+                    if dirname.endswith (file_spec):
+                        libs.append (os.path.join (root, dirname))
+        else:
+            for root, dirnames, filenames in os.walk(target_path):
+                for filename in filenames:
+                    if filename.endswith (file_spec):
+                        libs.append (os.path.join(root,filename))
+
+    else:
+        if isinstance (filter, basestring):
+            filter = [filter]
+        for f in filter:
+            f = f.strip()
+            path = target_path + os.sep + f
+            if (os.path.isdir(path)):
+                path = os.path.join (path, "*.*")
+            for filename in glob.glob(path):
+                if filename.endswith (file_spec):
+                    libs.append (filename)
+    return libs
+
+def install_libraries (target_path, type, filter, publisher, package_name, target_version):
+
+    if "footprint" in type:
+        # kicad_mod, other supported types
+        libs = get_libs (target_path, ".pretty", filter, True)
+
+        if len(libs) > 0:
+            print "footprint libs: ", len(libs)
+
+            update_global_table("fp", libs, target_path, publisher, package_name, target_version)
+        else:
+            print "No footprint libraries found in %s" % target_path
+
+    if "symbol" in type:
+        libs = get_libs (target_path, ".lib", filter, False)
+        # future: .sweet
+
+        if len(libs) > 0:
+            print "Symbol libs: ", len(libs)
+            update_global_table("sym", libs, target_path, publisher, package_name, target_version)
+        else:
+            print "No symbol libraries found in %s" % target_path
+
+    if "3dmodel" in type:
+        libs = get_libs (target_path, ".wrl", filter, False)
+        libs.extend (get_libs (target_path, ".step", filter, False))
+       
+        # copy to ...
+
+        if len(libs) > 0:
+            print "3D model files: ", len(libs)
+            # copy_folders (template_folders, target_path, ki_user_templates)
+            copy_files(libs, target_path, ki_packages3d_path)
+        else:
+            print "No 3D Models found in %s" % target_path
+
+    if "template" in type:
+        # todo
+        # could also check for 'meta' folder
+        # also worksheet files?
+        # copy to portable templates?
+        libs = get_libs (target_path, ".pro", filter, False)
+        template_folders = []
+        for lib in libs:
+            path = get_path (lib)
+            print "template %s" % path
+            template_folders.append (path)
+
+        # copy to user templates
+
+        if len(template_folders) > 0:
+            print "Templates: ", len(template_folders)
+            copy_folders (template_folders, target_path, ki_user_templates)
+        else:
+            print "No templates found in %s" % target_path
+
+    if "script" in type:
+        # check for simple vs complex scripts?
+
+        scripts = get_libs (target_path, ".py", filter, False)
+
+        if len(scripts) > 0:
+            print "Scripts : ", len(scripts)
+
+            if isinstance (filter, basestring):
+                path = get_path (target_path + os.sep + filter)
+            else:
+                path = target_path
+            copy_files (scripts, path, ki_user_scripts)
+        else:
+            print "No scripts found in %s" % target_path
+
+
+
+def read_package_info (filepath):
+    debug = False
+    providers = []
+    with open(filepath, 'r') as stream:
+        try:
+            parsed = yaml.load(stream)  # parse file
+
+            if parsed is None:
+                print("error: empty package file!")
+                return
+
+            for source in parsed:
+                kwargs = parsed.get(source)
+
+                # name is a reserved key
+                if 'name' in kwargs:
+                    print("error: name is already used for root name!")
+                    continue
+                kwargs['name'] = source
+
+                #print kwargs
+
+                providers.append (kwargs)
+
+                for package in kwargs['packages']:
+                    if debug: 
+                        print "   package: ver: %s" % ( package['version'])
+
+                    for content in package['content']:
+                        if debug: 
+                            print "      content: type: %s url: %s filters: %s" % ( 
+                                content['type'], content['url'],
+                                content['filter'] if "filter" in content else "*/*"
+                                )
+
+                # self._execute_script(**kwargs)  # now we can execute the script
+
+            return providers
+        except yaml.YAMLError as exc:
+            print(exc)
+            return None
+
+def write_config (filepath, data):
+    with open(filepath, 'w') as outfile:
+        yaml.dump(data, outfile, default_flow_style=False)
+
+def read_config (filepath):
+    if os.path.exists (filepath):
+        with open(filepath, 'r') as stream:
+            try:
+                parsed = yaml.load(stream)  # parse file
+
+                if parsed is None:
+                    print("error: empty config file!")
+                    return parsed
+
+                return parsed
+
+            except yaml.YAMLError as exc:
+                print (exc)
+                return None
+            except:
+                print("Unexpected error:", sys.exc_info()[0])
+                return None
+    else:
+        return None
+
+def add_installed (publisher, package_name, target_version):
+    installed = None
+    if "installed" in config:
+        installed = config['installed']
+
+    if installed == None:
+        installed = []
+
+    package = {}
+    package['publisher'] = publisher
+    package['package'] = package_name
+    package['version'] = target_version
+
+    new_list = []
+    for p in installed:
+        if p['publisher']==publisher and p['package']==package_name:
+            pass
+        else:
+            new_list.append (p)
+
+    new_list.append (package)
+    config['installed'] = new_list
+
+#
+# main
+#
+try:
+    opts, args = getopt.getopt(sys.argv[1:], "hqvtacdiu", 
+                               ["help", "quiet", "verbose", "absolute", "config", "download", "install", "uninstall"])
+except getopt.GetoptError as err:
+    print str(err)
+    usage()
+    sys.exit(-2)
+
+git_output = open(os.devnull, "w")
+
+dryrun = False
+git_quiet = False
+absolute = True
+verbose = False
+actions = ""
+
+for o, a in opts:
+    if o in ("-h", "--help"):
+        usage()
+        sys.exit(0)
+    elif o in ("-v", "--verbose"):
+        git_output.close()
+        git_output = None
+        verbose = True
+    elif o in ("-q", "--quiet"):
+        git_quiet = True
+    elif o in ("-t", "--test"):
+        dryrun = True
+    elif o in ("-a", "--absolute"):
+        absolute = True
+    elif o in ("-c", "--config"):
+        actions = "configure"
+    elif o in ("-d", "--download"):
+        actions = "download"
+    elif o in ("-i", "--install"):
+        actions = "download,install"
+    elif o in ("-u", "--uninstall"):
+        actions = "uninstall"
+    else:
+        print "error: Unhandled option,", o
+        usage()
+        sys.exit(-2)
+
+#if len(args) < 1:
+#    try:
+#        kisysmod = os.environ['KISYSMOD']
+#    except KeyError:
+#        print "error: No local folder specified, and couldn't read KISYSMOD environment variable"
+#        usage()
+#        sys.exit(-2)
+#else:
+#    kisysmod = args[0]
+
+if "configure" in actions:
+    config = {}
+    config ['cache_path'] = args[0] # todo check/default?
+    config ['default_package'] = "kicad-official-libraries-v5.yml"
+
+    write_config ("get-libs.cfg", config)
+    sys.exit(0)
+
+config = read_config ("get-libs.cfg")
+
+if not config:
+    print "error: need configuration"
+    print "run get_libs.py -c <cache_path>"
+    sys.exit(1)
+
+kisysmod = config['cache_path']
+default_package = config ['default_package']
+
+if len(args) > 0:
+    package_file = args[0]
+    if os.path.exists (package_file):
+        providers = read_package_info (package_file)
+    else:
+        print "error: can't open package file %s" % package_file
+        sys.exit(1)
+elif os.path.exists (default_package):
+    package_file = default_package 
+    providers = read_package_info (default_package)
+else:
+    print "error: No package file specified"
+    sys.exit(1)
+
+if providers == None:
+    print "error: No package info found"
+    sys.exit(1)
+
+if len(args) > 1:
+    target_version = args[1]
+else:
+    target_version = "latest"
+
+# todo: collect installed status?
+
+user_documents = ""
+kicad_config = get_config_path("kicad")
+
+ki_packages3d_path = os.environ['KISYS3DMOD']
+# also system templates?
+ki_user_templates = os.path.join(user_documents, "kicad", "template")
+ki_portable_templates_path = os.environ['KICAD_PTEMPLATES']
+
+ki_user_scripts = os.path.join(kicad_config, "scripting")
+
+#C:\Users\bob\AppData\Roaming\kicad\scripting
+#C:\Users\bob\AppData\Roaming\kicad\scripting\plugins
+
+# ~/.kicad_plugins/
+# C:\Users\bob\AppData\Roaming \kicad \scripts
+
+changes = True
+config ['default_package'] = package_file
+
+if "download" in actions:
+    for provider in providers:
+        print "Provider: %s desc: %s" % ( provider['name'], provider['description'])
+
+        for package in provider['packages']:
+
+            if package['version'] == target_version:
+                # print "   package: ver: %s" % ( package['version'])
+                 
+                for content in package['content']:
+                    #print "      content: type: %s url: %s filters: %s" % ( 
+                    #    content['type'], content['url'],
+                    #    content['filter'] if "filter" in content else "*/*"
+                    #    )
+
+                    target_path = os.path.join (kisysmod, provider['publisher'], provider['name'], content['name'], target_version)
+
+                    print "Download: %s to %s" % (content['url'], target_path)
+
+                    url = content['url']
+                    if url.endswith(".git"):
+                        git_path = os.path.join (kisysmod, provider['publisher'], provider['name'], content['name'])
+                        git_clone_or_update (url, git_path, target_version)
+                        ok = True
+                    else:
+                        # get zip
+                        if "checksum" in content:
+                            ok = get_zip (url, target_path, content['checksum'])
+                        else:
+                            print "Error: missing checksum for %s" % content['name']
+                            ok = False
+
+                    if ok and "install" in actions:
+                        install_libraries (target_path, content['type'], 
+                                           content['filter'] if "filter" in content else "*/*",
+                                           provider['publisher'], provider['name'], target_version)
+
+                        add_installed (provider['publisher'], provider['name'], target_version)
+                        changes = True
+        print ""
+
+    if changes:
+        write_config ("get-libs.cfg", config)
+
+sys.exit(0)
+
+if "download" in actions:
+    print "Destination folder: %s" % kisysmod
+
+    if not os.path.isdir(kisysmod):
+        os.makedirs(kisysmod)
+
+    # download data
+    #   fp folder
+    #   sym folder
+
+    ##
+    fp_libs=[]
+    sym_libs=[]
+
+    if version == "latest":
+        fp_local = "footprints-latest"
+        lib_local = "library-latest"
+
+        #dir = os.path.join(kisysmod, fp_local )
+        #fp_libs = [f for f in os.listdir(dir) if os.path.isdir(os.path.join(dir, f))]
+
+        fp_libs, sym_libs = get_latest()
+    else:
+        fp_local = "kicad-footprints-" + version
+        lib_local = "kicad-library-" + version
+        fp_libs = get_tagged_version (version)
+
+    print "footprint libs: ", len(fp_libs)
+    print "symbol libs: ", len(sym_libs)
+
+#
+# Install
+#
 if update_table:
-  if os.path.exists(os.path.expanduser("~/.config/kicad/fp-lib-table")):
-    libs = read_fp_lib_table()
+    if len(fp_libs) > 0:
+        update_global_fp_table(publisher, version)
 
-    found_auto = False
-    new_libs = []
-    for lib in libs:
-      if lib['options'].find("auto=true") > -1:
-        found_auto = True
-      else:
-        # keep all manual entries
-        new_libs.append(lib)
+    if len(sym_libs) > 0:
+        update_global_sym_table(publisher, version)
 
-    if not found_auto:
-      print "No auto update libraries found, (is this a first run?)"
-      print "Replacing fp-lib-table, old one will be stored at ~/.config/kicad/fp-lib-table-old"
+#
+# 3d models ?
+#
+# copy from os.path.join(kisysmod, "library-latest", "modules/packages3d" ) to ki_packages3d_path
+# copy_files (os.path.join(kisysmod, lib_local, "modules", "packages3d" ), ki_packages3d_path)
 
-      shutil.copy2(os.path.expanduser("~/.config/kicad/fp-lib-table"), os.path.expanduser("~/.config/kicad/fp-lib-table-old"))
-
-      # dump the library list
-      new_libs = []
-  else:
-    print "No fp-lib-table found, creating from scratch"
-    new_libs = []
-
-  # now add the newly cloned/updated repos to the list
-  for repo in full_list:
-    if repo.find(".pretty") > -1:
-      lib = {}
-      lib['name'] = repo.rsplit('/', 1)[1].split(".")[0]
-      lib['type'] = u'KiCad'
-      if absolute:
-        lib['uri'] = os.path.abspath(os.path.join(kisysmod, lib['name'] + ".pretty"))
-      else:
-        lib['uri'] = "${KISYSMOD}/" + lib['name'] + ".pretty"
-      lib['options'] = u'auto=true'
-      lib['descr'] = u'""'
-
-      new_libs.append(lib)
-
-  # finally, save the new fp-lib-table
-  write_fp_lib_table(new_libs)
 
