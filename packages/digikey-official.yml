@@ -1,0 +1,14 @@
+digikey-official:
+  publisher: DigiKey
+  description: Official libraries
+
+  packages:
+  - version: latest
+    content:
+    - name: digikey-kicad-library
+      url: https://github.com/digikey/digikey-kicad-library.git
+      - type: footprint
+        filter: .
+      - type: symbol
+        filter: digikey-symbols
+

@@ -1,0 +1,41 @@
+kicad-official-libs:
+  publisher: KiCad
+  description: Official libraries for v4
+
+  packages:
+    - version: latest
+      content:
+        - name: kicad-footprints
+          type: footprint
+          url: https://github.com/KiCad/kicad-footprints.git
+        - name: kicad-symbols
+          type: symbol
+          url: https://github.com/KiCad/kicad-symbols.git
+          filter: "*.*"
+    - version: 4.0.7
+      content:
+        - name: kicad-footprints
+          type: footprint
+          url: http://downloads.kicad-pcb.org/libraries/kicad-footprints-4.0.7.zip
+          checksum: "SHA-256:9c896d3e696d29efe512cb1dc7429f8e7d65023320962bc01192ff1fb7331dff"
+          size: 9388830
+        - name: kicad-symbols
+          type: symbol
+          url: http://downloads.kicad-pcb.org/libraries/kicad-library-4.0.7.zip
+          checksum: "SHA-256:11d9a9f263059eea151edae8becb042e5e630dfe49bfda5c76af872fd93fcc2a"
+          size: 475257538
+          filter: "kicad-library-4.0.7/library/*.lib"
+    - version: 4.0.6
+      content:
+        - name: kicad-footprints
+          type: footprint
+          url: http://downloads.kicad-pcb.org/libraries/kicad-footprints-4.0.6.zip
+          checksum: "SHA-256:842230e3337efc00b4a6e2d6ed8d16d933ab7fea2304015ac4292377c1da39f6"
+          size: 7861215
+        - name: kicad-symbols
+          type: symbol
+          url: http://downloads.kicad-pcb.org/libraries/kicad-library-4.0.6.zip
+          checksum: "SHA-256:264877516c80aa2428afa4867e01c330d8344df73266be0f2d551d3c77314309"
+          size: 172942005
+          filter: "kicad-library-4.0.6/library/*.lib"
+

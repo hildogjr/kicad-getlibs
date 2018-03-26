@@ -1,0 +1,17 @@
+kicad-official-templates:
+  publisher: KiCad
+  description: Official templates for v5
+
+  packages:
+    - version: latest
+      content:
+      - name: kicad-templates
+        type: template
+        url: https://github.com/KiCad/kicad-templates.git
+    - version: 5.0.0-rc1
+      content:
+      - name: kicad-templates
+        type: template
+        url: https://github.com/KiCad/kicad-templates/archive/5.0.0-rc1.zip
+        checksum: "SHA-256:1e8fc23d21cab383dea56fbe95d85d0ab269c8c494526d499a92917fa1dbd98a"
+        size: 1660152

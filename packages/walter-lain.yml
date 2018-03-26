@@ -1,0 +1,11 @@
+walter-lain:
+  publisher: Walter Lain
+  description: Walter Lain's libraries
+
+  packages:
+  - version: latest
+    content:
+    - name: kicad_libs
+      type: footprint, symbol
+      url: git://smisioto.eu/kicad_libs.git
+      filter: [library/*.lib, "modules/*.pretty"]

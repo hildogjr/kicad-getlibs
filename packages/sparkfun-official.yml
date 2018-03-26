@@ -1,0 +1,11 @@
+sparkfun-official:
+  publisher: SparkFun Electronics
+  description: Official libraries
+
+  packages:
+  - version: latest
+    content:
+    - name: SparkFun-KiCad-Libraries
+      type: footprint, symbol
+      url: https://github.com/sparkfun/SparkFun-KiCad-Libraries.git
+      filter: [Libraries, Footprints]
