@@ -13,7 +13,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <InterpreterVersion />
-    <CommandLineArguments>-vti packages\bobc-kicad-scripts.yml</CommandLineArguments>
+    <CommandLineArguments>-ivt c:\git_bobc\kicad-utils\package_bobc-kicad-scripts_info.yml 1.0.0</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
@@ -24,6 +24,9 @@
     <PtvsTargetsFile>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets</PtvsTargetsFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="checksum.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="lib_table.py" />
     <Compile Include="kicad-getlibs.py" />
     <Compile Include="str_util.py" />

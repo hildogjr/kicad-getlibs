@@ -1,4 +1,4 @@
-import os
+
 
 def read_fp_lib_table(filename):
     return read_lib_table (filename, "fp")
@@ -54,6 +54,4 @@ def write_lib_table(filename, type, libs):
 
     fw.write(")\n")
     fw.close()
-
-
 
