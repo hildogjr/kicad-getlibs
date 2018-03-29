@@ -1,0 +1,19 @@
+kicad-official-libs:
+  publisher: KiCad
+  description: Official libraries for v5
+
+  packages:
+    - version: latest
+      content:
+        - name: kicad-packages3D
+          type: 3dmodel
+          url: https://github.com/KiCad/kicad-packages3D.git
+    - version: 5.0.0-rc1
+      content:
+        - name: kicad-packages3D
+          type: 3dmodel
+          url: https://github.com/KiCad/kicad-packages3D/archive/5.0.0-rc1.zip
+          checksum: "SHA-256:94c7e6414e13bab533c2dc5f46b9ed0cc95c35f0d893ec7178f279a3fa16a774"
+          size: 756892526
+
+
