@@ -1,18 +1,12 @@
 
 """
+Example script to create a package info file for kicad-getlibs.
 
-make zip - name, ver
 
-get sha, size
+-make zip - name, ver
+-get sha, size
+-write .yml file
 
-write .yml file
-
-publisher
-package
-vers
-
-zips...
-   extracts...
 
 """
 
@@ -68,14 +62,11 @@ package_name = "bobc-kicad-scripts"
 publisher = "bobc"
 description = "Footprint wizards"
 
-package_version1 = make_version ("scripts", "1.0.0")
-#package_version2 = make_version ("scripts", "1.0.1")
-
 versions = []
-versions.append (package_version1)
-#versions.append (package_version2)
-
-# include previous versions?
+versions.append (make_version ("scripts", "1.0.0-rc1"))
+versions.append (make_version ("scripts", "1.0.0-rc2"))
+versions.append (make_version ("scripts", "1.0.0"))
+#versions.append (make_version ("scripts", "1.0.1"))
 
 package = {}
 package ['publisher'] = publisher
@@ -85,11 +76,8 @@ package ['packages'] = versions
 package_file = {}
 package_file [package_name] = package
 
-write_package_file ("package_%s_info.yml" % package_name, package_file)
+write_package_file ("%s.yml" % package_name, package_file)
 
 print "package url:"
-print "https://raw.githubusercontent.com/bobc/kicad-utils/v5/package_%s_info.yml" % package_name
+print "https://raw.githubusercontent.com/bobc/kicad-utils/v5/%s.yml" % package_name
 
-# https://raw.githubusercontent.com/akafugu/akafugu_core/master/package_akafugu_index.json
-# "https://raw.githubusercontent.com/bobc/kicad-utils/v5/package_%s_info.yml" % package_name
-# "https://raw.githubusercontent.com/bobc/kicad-utils/v5/%s" % zip_name

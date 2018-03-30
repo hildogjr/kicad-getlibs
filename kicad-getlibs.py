@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import urllib2
+import argparse
+import glob
 import json
 import os
-import sys
-import glob
-import shutil
-import urllib
-import zipfile
-import argparse
 from subprocess import Popen
 import subprocess
+import sys
+import shutil
+import urllib
+import urllib2
 import yaml
+import zipfile
 
 from checksum import get_sha256_hash
 from str_util import *
@@ -26,10 +26,9 @@ A tool for downloading and installing kiCad packages, primarily for KiCad v5.
 
 External dependencies: to clone git repos locally requires git, otherwise only zips can be used.
 
-Runs on Windows, Linux (MacOs might also work!).
+Runs on Windows, should run on Linux (MacOs might also work!).
 
 Tested on Windows 7, 64 bit, not tested on other platforms.
-
 
 """
 
@@ -687,7 +686,7 @@ other script?    (.py)
 
 demos (folder containing .pro)
 tutorials?
-langauge files?
+language files?
 """
 
 def change_extension (filename, ext):
@@ -1149,22 +1148,22 @@ def perform_actions(package_file, version, actions):
 #
 parser = argparse.ArgumentParser(description="Download and install KiCad data packages")
 
-parser.add_argument("package_file", help="specifies the package to download/install", nargs='?')
-parser.add_argument("version", help='a valid version from the package file or "latest"', nargs='?')
+parser.add_argument("package_file",     help="specifies the package to download/install", nargs='?')
+parser.add_argument("version",          help='a valid version from the package file or "latest"', nargs='?')
 
-parser.add_argument("-v", "--verbose",  help="Enable verbose output", action="store_true")
-parser.add_argument("-q", "--quiet",    help="Suppress messages", action="store_true")
+parser.add_argument("-v", "--verbose",  help="enable verbose output", action="store_true")
+parser.add_argument("-q", "--quiet",    help="suppress messages", action="store_true")
 parser.add_argument("-t", "--test",     help="dry run", action="store_true")
 
-parser.add_argument("-c", "--config",  metavar="local_folder", help="Configure get-libs. <local_folder> is the folder which stores downloaded package data")
+parser.add_argument("-c", "--config",  metavar="local_folder", help="configure get-libs. <local_folder> is the folder which stores downloaded package data")
 
-parser.add_argument("-d", "--download", help="Download the specified package data", action="store_true")
-parser.add_argument("-i", "--install",  help="Install package data into KiCad (implies download)", action="store_true")
-parser.add_argument("-r", "--remove" ,  help="Remove an installed package from KiCad", action="store_true")
-parser.add_argument("-u", "--update" ,  help="Update packages installed package in KiCad", action="store_true")
-parser.add_argument("-l", "--list",     help="List installed packages", action="store_true")
+parser.add_argument("-d", "--download", help="download the specified package data", action="store_true")
+parser.add_argument("-i", "--install",  help="install package data into KiCad (implies download)", action="store_true")
+parser.add_argument("-r", "--remove" ,  help="remove an installed package from KiCad", action="store_true")
+parser.add_argument("-u", "--update" ,  help="update packages installed in KiCad", action="store_true")
+parser.add_argument("-l", "--list",     help="list installed packages", action="store_true")
 
-parser.add_argument("--catalog",        help="List local package files", action="store_true")
+parser.add_argument("--catalog",        help="list local package files", action="store_true")
 
 args = parser.parse_args()
 
@@ -1259,7 +1258,6 @@ if args.update:
             # only if flag?
             if package['url']:
                 get_package_file (package['url'])
-                # get url
 
             #
             providers = read_package_info (package['package_file'])
@@ -1314,11 +1312,11 @@ elif args.list:
             # only if flag?
             if package['url']:
                 get_package_file (package['url'])
-                # get url
 
             #
             providers = read_package_info (package['package_file'])
             if providers:
+                # TODO 
                 latest_package = find_version (providers[0], "latest")
 
             s = "%-15s %-35s" % (package['publisher'], package['package']) 
@@ -1352,11 +1350,14 @@ elif args.list:
         print ("no packages installed")
     err_code = 0
 
-else:
+elif actions:
     err_code = get_package_file(args.package_file)
 
     if err_code == 0:
         err_code = perform_actions(package_file, args.version, actions)
+else:
+    parser.print_help()
+    err_code = 0
 
 sys.exit(err_code)
 
