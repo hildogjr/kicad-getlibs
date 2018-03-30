@@ -1,5 +1,18 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
+"""
+@package
+KiPI - A tool for downloading and installing KiCad packages, primarily for KiCad v5.
+
+External dependencies: to clone git repos locally requires git, otherwise only zips can be used.
+
+Runs on Windows, should run on Linux (MacOs might also work!).
+
+Tested on Windows 7, 64 bit, not tested on other platforms.
+
+"""
+
 from __future__ import print_function
+#from __future__ import absolute_import
 
 import argparse
 import glob
@@ -14,23 +27,12 @@ import urllib2
 import yaml
 import zipfile
 
-from checksum import get_sha256_hash
-from str_util import *
-from lib_table import read_lib_table, write_lib_table
+from .__init__ import __version__
 
-"""
-KiCad-GetLibs
-=============
+from .checksum import get_sha256_hash
+from .str_util import *
+from .lib_table import read_lib_table, write_lib_table
 
-A tool for downloading and installing kiCad packages, primarily for KiCad v5.
-
-External dependencies: to clone git repos locally requires git, otherwise only zips can be used.
-
-Runs on Windows, should run on Linux (MacOs might also work!).
-
-Tested on Windows 7, 64 bit, not tested on other platforms.
-
-"""
 
 class Version:
     def __init__(self, s=None):
@@ -1146,218 +1148,223 @@ def perform_actions(package_file, version, actions):
 #
 # main
 #
-parser = argparse.ArgumentParser(description="Download and install KiCad data packages")
+def main():
+    parser = argparse.ArgumentParser(description="Download and install KiCad data packages")
 
-parser.add_argument("package_file",     help="specifies the package to download/install", nargs='?')
-parser.add_argument("version",          help='a valid version from the package file or "latest"', nargs='?')
+    parser.add_argument("package_file",     help="specifies the package to download/install", nargs='?')
+    parser.add_argument("version",          help='a valid version from the package file or "latest"', nargs='?')
 
-parser.add_argument("-v", "--verbose",  help="enable verbose output", action="store_true")
-parser.add_argument("-q", "--quiet",    help="suppress messages", action="store_true")
-parser.add_argument("-t", "--test",     help="dry run", action="store_true")
+    parser.add_argument("-v", "--verbose",  help="enable verbose output", action="store_true")
+    parser.add_argument("-q", "--quiet",    help="suppress messages", action="store_true")
+    parser.add_argument("-t", "--test",     help="dry run", action="store_true")
 
-parser.add_argument("-c", "--config",  metavar="local_folder", help="configure get-libs. <local_folder> is the folder which stores downloaded package data")
+    parser.add_argument("-c", "--config",  metavar="local_folder", help="configure get-libs. <local_folder> is the folder which stores downloaded package data")
 
-parser.add_argument("-d", "--download", help="download the specified package data", action="store_true")
-parser.add_argument("-i", "--install",  help="install package data into KiCad (implies download)", action="store_true")
-parser.add_argument("-r", "--remove" ,  help="remove an installed package from KiCad", action="store_true")
-parser.add_argument("-u", "--update" ,  help="update packages installed in KiCad", action="store_true")
-parser.add_argument("-l", "--list",     help="list installed packages", action="store_true")
+    parser.add_argument("-d", "--download", help="download the specified package data", action="store_true")
+    parser.add_argument("-i", "--install",  help="install package data into KiCad (implies download)", action="store_true")
+    parser.add_argument("-r", "--remove" ,  help="remove an installed package from KiCad", action="store_true")
+    parser.add_argument("-u", "--update" ,  help="update packages installed in KiCad", action="store_true")
+    parser.add_argument("-l", "--list",     help="list installed packages", action="store_true")
 
-parser.add_argument("--catalog",        help="list local package files", action="store_true")
+    parser.add_argument("--catalog",        help="list local package files", action="store_true")
+    parser.add_argument("--version",        action="version", version='KiPI ' + __version__)
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
-# default is to dump git output to null, i.e. not verbose
-git_output = open(os.devnull, "w")
-absolute = True
-actions = ""
+    # default is to dump git output to null, i.e. not verbose
+    git_output = open(os.devnull, "w")
+    absolute = True
+    actions = ""
 
-if args.verbose:
-    git_output.close()
-    git_output = None
+    if args.verbose:
+        git_output.close()
+        git_output = None
 
-#if args.config:
-#    actions = "configure"
+    #if args.config:
+    #    actions = "configure"
 
-if args.download:
-    actions = "download"
+    if args.download:
+        actions = "download"
 
-if args.install:
-    actions = "download,install"
+    if args.install:
+        actions = "download,install"
 
-if args.remove:
-    actions = "remove"
+    if args.remove:
+        actions = "remove"
 
-if args.update:
-    actions = "update"
+    if args.update:
+        actions = "update"
 
-#if len(args) < 1:
-#    try:
-#        kisysmod = os.environ['KISYSMOD']
-#    except KeyError:
-#        print ("error: No local folder specified, and couldn't read KISYSMOD environment variable")
-#        usage()
-#        sys.exit(-2)
-#else:
-#    kisysmod = args[0]
+    #if len(args) < 1:
+    #    try:
+    #        kisysmod = os.environ['KISYSMOD']
+    #    except KeyError:
+    #        print ("error: No local folder specified, and couldn't read KISYSMOD environment variable")
+    #        usage()
+    #        sys.exit(-2)
+    #else:
+    #    kisysmod = args[0]
 
-getlibs_config_folder = get_config_path("kicad-getlibs")
-getlibs_config_file = os.path.join (getlibs_config_folder, "kicad-getlibs.cfg")
+    getlibs_config_folder = get_config_path("kicad-getlibs")
+    getlibs_config_file = os.path.join (getlibs_config_folder, "kicad-getlibs.cfg")
 
-if os.path.exists(getlibs_config_file):
-    config = read_config (getlibs_config_file)
-else:
-    config = None
+    if os.path.exists(getlibs_config_file):
+        config = read_config (getlibs_config_file)
+    else:
+        config = None
 
-if args.config:
-    if config == None:
-        config = {}
-        config ['default_package'] = "kicad-official-libraries-v5.yml"
-    config ['cache_path'] = args.config # todo check/default?
-    make_folder (getlibs_config_folder)
-    write_config (getlibs_config_file, config)
-    sys.exit(0)
+    if args.config:
+        if config == None:
+            config = {}
+            config ['default_package'] = "kicad-official-libraries-v5.yml"
+        config ['cache_path'] = args.config # todo check/default?
+        make_folder (getlibs_config_folder)
+        write_config (getlibs_config_file, config)
+        sys.exit(0)
 
-if not config:
-    print ("error: need configuration")
-    print ("run kicad-getlibs.py -c <cache_path>")
-    sys.exit(1)
+    if not config:
+        print ("error: need configuration")
+        print ("run kicad-getlibs.py -c <cache_path>")
+        sys.exit(1)
 
 
-cache_path = config['cache_path']
-default_package = config ['default_package']
+    cache_path = config['cache_path']
+    default_package = config ['default_package']
 
-package_info_dir = os.path.join (cache_path, "packages")
+    package_info_dir = os.path.join (cache_path, "packages")
 
-package_info_search_path = [".", package_info_dir, "../packages"]
+    package_info_search_path = [".", package_info_dir, "../packages"]
 
-user_documents = get_user_documents()
-kicad_config = get_config_path("kicad")
+    user_documents = get_user_documents()
+    kicad_config = get_config_path("kicad")
 
-ki_packages3d_path = os.environ['KISYS3DMOD']
-# also system templates?
-ki_user_templates = os.path.join(user_documents, "kicad", "template")
-ki_portable_templates_path = os.environ['KICAD_PTEMPLATES']
+    ki_packages3d_path = os.environ['KISYS3DMOD']
+    # also system templates?
+    ki_user_templates = os.path.join(user_documents, "kicad", "template")
+    ki_portable_templates_path = os.environ['KICAD_PTEMPLATES']
 
-ki_user_scripts = os.path.join(kicad_config, "scripting")
+    ki_user_scripts = os.path.join(kicad_config, "scripting")
 
-#C:\Users\bob\AppData\Roaming\kicad\scripting
-#C:\Users\bob\AppData\Roaming\kicad\scripting\plugins
+    #C:\Users\bob\AppData\Roaming\kicad\scripting
+    #C:\Users\bob\AppData\Roaming\kicad\scripting\plugins
 
-# ~/.kicad_plugins/
-# C:\Users\bob\AppData\Roaming \kicad \scripts
+    # ~/.kicad_plugins/
+    # C:\Users\bob\AppData\Roaming \kicad \scripts
 
-#
-have_git = git_check()
+    #
+    have_git = git_check()
 
-if args.update:
-    if "installed" in config and config['installed']:
-        update_packages = []
-        for package in config['installed']:
-            # get from url?
-            # only if flag?
-            if package['url']:
-                get_package_file (package['url'])
+    if args.update:
+        if "installed" in config and config['installed']:
+            update_packages = []
+            for package in config['installed']:
+                # get from url?
+                # only if flag?
+                if package['url']:
+                    get_package_file (package['url'])
 
-            #
-            providers = read_package_info (package['package_file'])
-            if providers:
-                latest_package = find_version (providers[0], "latest")
+                #
+                providers = read_package_info (package['package_file'])
+                if providers:
+                    latest_package = find_version (providers[0], "latest")
 
-            latest = Version (latest_package['version'])
-            if latest.compare (Version (package['version'])):
-                print ("%-15s %-20s %s (latest %s)" % (package['publisher'], package['package'], package['version'],
-                                                      latest_package['version'] if latest_package else "") )
-                update_packages.append(package)
+                latest = Version (latest_package['version'])
+                if latest.compare (Version (package['version'])):
+                    print ("%-15s %-20s %s (latest %s)" % (package['publisher'], package['package'], package['version'],
+                                                          latest_package['version'] if latest_package else "") )
+                    update_packages.append(package)
 
-        if len(update_packages) > 0:
-            ans = raw_input( "Update packages [Y] ? ")
-            if ans == "" or ans.lower().startswith("y"):
-            #
-                for package in update_packages:
-                    # remove current?
-                    # remove_package (package)
+            if len(update_packages) > 0:
+                ans = raw_input( "Update packages [Y] ? ")
+                if ans == "" or ans.lower().startswith("y"):
+                #
+                    for package in update_packages:
+                        # remove current?
+                        # remove_package (package)
 
-                    package_url = package['url']
-                    perform_actions (package['package_file'], package['version'], "remove")
+                        package_url = package['url']
+                        perform_actions (package['package_file'], package['version'], "remove")
 
-                    perform_actions (package['package_file'], latest_package['version'], "download,install")
+                        perform_actions (package['package_file'], latest_package['version'], "download,install")
+
+            else:
+                print ("No updates available")
+        else:
+            print ("no packages installed")
+        err_code = 0
+
+    elif args.catalog:
+        # 
+        files = find_files (package_info_search_path, "*.yml")
+
+        print ("Local package info files:")
+        print ("")
+
+        if files:
+            for f in files:
+                print ("  " + f)
+        else:
+            print ("No local package info files found")
+        err_code = 0
+
+    elif args.list:
+        if "installed" in config and config['installed']:
+            print ("%-15s %-35s %s" % ("Publisher", "Package name", "Installed Version (latest)") )
+            print ('-' * (15+1+35+28))
+            for package in config['installed']:
+                # get from url?
+                # only if flag?
+                if package['url']:
+                    get_package_file (package['url'])
+
+                #
+                providers = read_package_info (package['package_file'])
+                if providers:
+                    # TODO 
+                    latest_package = find_version (providers[0], "latest")
+
+                s = "%-15s %-35s" % (package['publisher'], package['package']) 
+            
+                if package['version'] == "latest":
+                    if "git_repo" in package:
+                        s += " git: %s" % get_git_status (package['git_repo'])
+
+                        branch = get_git_branch_name (package['git_repo'])
+                        status = get_git_branch_status (package['git_repo'], branch)
+                        if s:
+                            s += " (%s)" % status
+                    else:
+                        s += " git: unknown"
+                else:
+                    s += " %s" % package['version']
+                    if latest_package and is_later_version (latest_package['version'], package ['version']):
+                        s += " (latest %s)" % latest_package['version']
+
+                if package['url']:
+                    s += "%s" % package['url']
+
+                print (s)
+
+                if args.verbose:
+                    if package['files']:
+                        for f in package['files']:
+                            print ("   %s" % (f))
 
         else:
-            print ("No updates available")
+            print ("no packages installed")
+        err_code = 0
+
+    elif actions:
+        err_code = get_package_file(args.package_file)
+
+        if err_code == 0:
+            err_code = perform_actions(package_file, args.version, actions)
     else:
-        print ("no packages installed")
-    err_code = 0
+        parser.print_help()
+        err_code = 0
 
-elif args.catalog:
-    # 
-    files = find_files (package_info_search_path, "*.yml")
+    sys.exit(err_code)
 
-    print ("Local package info files:")
-    print ("")
-
-    if files:
-        for f in files:
-            print ("  " + f)
-    else:
-        print ("No local package info files found")
-    err_code = 0
-
-elif args.list:
-    if "installed" in config and config['installed']:
-        print ("%-15s %-35s %s" % ("Publisher", "Package name", "Installed Version (latest)") )
-        print ("")                                                    
-        for package in config['installed']:
-            # get from url?
-            # only if flag?
-            if package['url']:
-                get_package_file (package['url'])
-
-            #
-            providers = read_package_info (package['package_file'])
-            if providers:
-                # TODO 
-                latest_package = find_version (providers[0], "latest")
-
-            s = "%-15s %-35s" % (package['publisher'], package['package']) 
-            
-            if package['version'] == "latest":
-                if "git_repo" in package:
-                    s += " git: %s" % get_git_status (package['git_repo'])
-
-                    branch = get_git_branch_name (package['git_repo'])
-                    status = get_git_branch_status (package['git_repo'], branch)
-                    if s:
-                        s += " (%s)" % status
-                else:
-                    s += " git: unknown"
-            else:
-                s += " %s" % package['version']
-                if latest_package and is_later_version (latest_package['version'], package ['version']):
-                    s += " (latest %s)" % latest_package['version']
-
-            if package['url']:
-                s += "%s" % package['url']
-
-            print (s)
-
-            if args.verbose:
-                if package['files']:
-                    for f in package['files']:
-                        print ("   %s" % (f))
-
-    else:
-        print ("no packages installed")
-    err_code = 0
-
-elif actions:
-    err_code = get_package_file(args.package_file)
-
-    if err_code == 0:
-        err_code = perform_actions(package_file, args.version, actions)
-else:
-    parser.print_help()
-    err_code = 0
-
-sys.exit(err_code)
-
+# main entrypoint.
+if __name__ == '__main__':
+    main()
