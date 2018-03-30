@@ -1205,8 +1205,8 @@ def main():
     #else:
     #    kisysmod = args[0]
 
-    getlibs_config_folder = get_config_path("kicad-getlibs")
-    getlibs_config_file = os.path.join (getlibs_config_folder, "kicad-getlibs.cfg")
+    getlibs_config_folder = get_config_path("kipi")
+    getlibs_config_file = os.path.join (getlibs_config_folder, "kipi.cfg")
 
     if os.path.exists(getlibs_config_file):
         config = read_config (getlibs_config_file)
@@ -1224,7 +1224,7 @@ def main():
 
     if not config:
         print ("error: need configuration")
-        print ("run kicad-getlibs.py -c <cache_path>")
+        print ("run kipi -c <cache_path>")
         sys.exit(1)
 
 

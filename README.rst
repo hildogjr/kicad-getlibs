@@ -1,9 +1,9 @@
-KiCad-GetLibs
-=============
+KiPI
+====
 
-A tool for downloading and installing kiCad packages. May require KiCad v5.
+A tool for downloading and installing kiCad packages, primarily for KiCad v5.
 
-Runs on Windows, Linux (MacOs might work).
+Runs on Windows, should run on Linux (MacOs might also work).
 
 Description
 -----------
@@ -32,7 +32,7 @@ Existing xx-lib-table will be saved to xx-lib-table-old.
 Usage
 -----
 
-`python kicad-getlibs.py [options] <package file> [<version>]`
+`kipi [options] <package file> [<version>]`
 
 Package file contains the packages to download/install.
 Version is a valid version from the package file or "latest".
@@ -56,9 +56,9 @@ Options are:
 
 **Example Usage**
 
-`python kicad-getlibs.py -c c:\kicad_data`
+`kipi -c c:\kicad_data`
 
-`python kicad-getlibs.py -vi kicad-official-libraries-v5.yml`
+`kipi -vi kicad-official-libraries-v5.yml`
 
 **Dependencies**
 
