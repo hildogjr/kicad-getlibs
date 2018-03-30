@@ -1,0 +1,37 @@
+avr-arduino-kicad:
+  description: KiCad libraries and templates for AVR microcontrollers with a pinout
+    that matches Arduino.
+  packages:
+  - content:
+    - checksum: SHA-256:bacc5f3afbbcf28e8d33efdc87b2c3f26db8a4768f460304effafd85817b7230
+      filter: '*/*'
+      name: avr-arduino-kicad-1.0-14DIP
+      size: 8603
+      type: template
+      url: https://github.com/ppelleti/avr-arduino-kicad/releases/download/1.0/avr-arduino-kicad-1.0-14DIP.zip
+    - checksum: SHA-256:d2fafbfe265b73de918b2b955ff19b70f63619f052644fb9565462bebac90274
+      filter: '*/*'
+      name: avr-arduino-kicad-1.0-28DIP
+      size: 9543
+      type: template
+      url: https://github.com/ppelleti/avr-arduino-kicad/releases/download/1.0/avr-arduino-kicad-1.0-28DIP.zip
+    - checksum: SHA-256:da743c051be666025f96ef1f31d068fb5daf75fcc89ca44d5ca0642b9d086e82
+      filter: '*/*'
+      name: avr-arduino-kicad-1.0-40DIP
+      size: 9720
+      type: template
+      url: https://github.com/ppelleti/avr-arduino-kicad/releases/download/1.0/avr-arduino-kicad-1.0-40DIP.zip
+    - checksum: SHA-256:796764ebba34a1fc97ae4666c8617b54ce6e753b60d0ae864acc85bca41049a6
+      filter: '*/*'
+      name: avr-arduino-kicad-1.0-8DIP
+      size: 8477
+      type: template
+      url: https://github.com/ppelleti/avr-arduino-kicad/releases/download/1.0/avr-arduino-kicad-1.0-8DIP.zip
+    - checksum: SHA-256:1e9ef4be1698a4b3c533b4be56ecd61d4743f6baab35abceb90d0cebd0b77f0a
+      filter: '*/*'
+      name: avr-arduino-kicad-1.0-library
+      size: 3679
+      type: template
+      url: https://github.com/ppelleti/avr-arduino-kicad/releases/download/1.0/avr-arduino-kicad-1.0-library.zip
+    version: '1.0'
+  publisher: ppelleti

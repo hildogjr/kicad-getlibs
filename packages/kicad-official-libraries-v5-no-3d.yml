@@ -12,9 +12,6 @@ kicad-official-libs-v5-with-3d:
           type: symbol
           url: https://github.com/KiCad/kicad-symbols.git
           filter: "*.*"
-        - name: kicad-packages3D
-          type: 3dmodel
-          url: https://github.com/KiCad/kicad-packages3D.git
     - version: 5.0.0-rc1
       content:
         - name: kicad-footprints
@@ -28,11 +25,6 @@ kicad-official-libs-v5-with-3d:
           url: https://github.com/KiCad/kicad-symbols/archive/5.0.0-rc1.zip
           checksum: "SHA-256:e1d2ddb45775cee559d103a1e989997f421e5c30d9a290b7a94e205e5d2299b4"
           size: 2641482
-        - name: kicad-packages3D
-          type: 3dmodel
-          url: https://github.com/KiCad/kicad-packages3D/archive/5.0.0-rc1.zip
-          checksum: "SHA-256:3059c90cb39d778a7c431d2affd02b16b41d13d3aee8f3376b7c355ed1e5cc66"
-          size: 12419667
 
 
 
