@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{7f492477-e278-4d22-a0fb-1cc14981a4e0}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>kicad-getlibs.py</StartupFile>
+    <StartupFile>kicad_getlibs.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>c:\git_bobc\kicad-getlibs\KiPI</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -27,8 +27,8 @@
     <Compile Include="checksum.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="kicad_getlibs.py" />
     <Compile Include="lib_table.py" />
-    <Compile Include="kicad-getlibs.py" />
     <Compile Include="str_util.py" />
     <Compile Include="__init__.py" />
   </ItemGroup>

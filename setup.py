@@ -11,6 +11,8 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
+import kipi
+
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the README file
@@ -158,7 +160,7 @@ setup(
     # executes the function `main` from this package when invoked:
     entry_points={  # Optional
         'console_scripts': [
-            'kipi=kipi.kicad-getlibs:main',
+            'kipi=kipi.kicad_getlibs:main',
         ],
     },
 
@@ -171,7 +173,7 @@ setup(
     # issues, where the source is hosted, where to say thanks to the package
     # maintainers, and where to support the project financially. The key is
     # what's used to render the link text on PyPI.
-    project_urls={  # Optional
+    project_urls = {  # Optional
         'Bug Reports': 'https://github.com/bobc/kicad-getlibs/issues',
         'Source': 'https://github.com/bobc/kicad-getlibs/',
     },
