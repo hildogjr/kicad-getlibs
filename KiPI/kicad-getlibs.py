@@ -1229,7 +1229,7 @@ default_package = config ['default_package']
 
 package_info_dir = os.path.join (cache_path, "packages")
 
-package_info_search_path = [".", package_info_dir, "packages"]
+package_info_search_path = [".", package_info_dir, "../packages"]
 
 user_documents = get_user_documents()
 kicad_config = get_config_path("kicad")

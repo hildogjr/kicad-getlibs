@@ -1,11 +1,11 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "kicad-getlibs", "kicad-getlibs.pyproj", "{7F492477-E278-4D22-A0FB-1CC14981A4E0}"
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "kicad-getlibs", "KiPi\kicad-getlibs.pyproj", "{7F492477-E278-4D22-A0FB-1CC14981A4E0}"
 EndProject
-Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "gen_from_github", "..\gen_from_github\gen_from_github.pyproj", "{03DDA8D6-1109-4DEF-BA7F-4EF4B7F601BE}"
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "gen_from_github", "gen_github_package\gen_from_github.pyproj", "{03DDA8D6-1109-4DEF-BA7F-4EF4B7F601BE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
