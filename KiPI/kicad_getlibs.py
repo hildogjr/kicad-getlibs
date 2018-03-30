@@ -9,6 +9,7 @@ Runs on Windows, should run on Linux (MacOs might also work!).
 
 Tested on Windows 7, 64 bit, not tested on other platforms.
 
+Derived from https://github.com/hairymnstr/kicad-getlibs.
 """
 
 from __future__ import print_function

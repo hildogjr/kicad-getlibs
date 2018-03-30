@@ -72,3 +72,7 @@ Bugs/Feature Requests
 
 Please raise issue on github.
 
+Credits
+-------
+
+KiPI is derived from project https://github.com/hairymnstr/kicad-getlibs.
