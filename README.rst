@@ -11,8 +11,8 @@ Description
 Currently supports footprints, symbols and templates. Configurations for KiCad
 official v5 libraries and templates, SparkFun, DigiKey and Walter Lain libraries.
 
-Where available, point releases are downloaded as a zip file. Otherwise, latest
-versions of git repositories are cloned locally.
+Typically where available, point releases are downloaded as a zip file. Otherwise, latest
+versions of git repositories can be cloned locally.
 
 This script uses git to:
 
@@ -23,9 +23,9 @@ Content types:
 
 - Footprints can be installed to fp-lib-table.
 - Symbols can be installed to sym-lib-table.
-- Templates are copied to $USER/kicad/template
-- 3dmodels TODO
-- Scripts TODO
+- Templates are copied to ~/Documents/kicad/templates
+- 3dmodels are copied to ${KISYS3DMOD}
+- Scripts are copied to ${APPDATA}/kicad/scripting
 
 Existing xx-lib-table will be saved to xx-lib-table-old.
 
@@ -56,7 +56,7 @@ Options are:
 
 **Example Usage**
 
-`kipi -c c:\kicad_data`
+`kipi -c c:\\kicad_data`
 
 `kipi -vi kicad-official-libraries-v5.yml`
 

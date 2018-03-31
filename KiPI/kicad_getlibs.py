@@ -13,69 +13,43 @@ Derived from https://github.com/hairymnstr/kicad-getlibs.
 """
 
 from __future__ import print_function
-#from __future__ import absolute_import
 
 import argparse
 import glob
-import json
+#import json
 import os
 from subprocess import Popen
 import subprocess
 import sys
 import shutil
 import urllib
-import urllib2
-import yaml
+#import urllib2
 import zipfile
 
-from .__init__ import __version__
+import yaml
+import psutil
 
-from .checksum import get_sha256_hash
-from .str_util import *
-from .lib_table import read_lib_table, write_lib_table
+if __package__ is None:
 
+    from __init__ import __version__
 
-class Version:
-    def __init__(self, s=None):
-        self.major = 0
-        self.minor = 0
-        self.patch = 0
-        self.pre_release = None
-        if s:
-            items = s.split(".")
-            self.major = items[0]
-            if len(items)>1:
-                self.minor = items[1]
-                if len(items)>2:
-                    self.patch = items[2]
-                    if "-" in self.patch:
-                        self.pre_release = self.patch.split("-")[1]
-                        self.patch = self.patch.split("-")[0]
+    from checksum import get_sha256_hash
+    from str_util import *
+    from lib_table import read_lib_table, write_lib_table
+    from semver import Version, is_later_version
+else:
 
-    # return True of self > other
-    def compare (self, other):
-        if self.major > other.major:
-            return True
-        elif self.major == other.major:
-            if self.minor > other.minor:
-                return True
-            elif self.minor == other.minor:
-                if self.patch > other.patch:
-                    return True
-                elif self.patch == other.patch:
-                    if (self.pre_release is None and not other.pre_release is None) or self.pre_release > other.pre_release:
-                        return True
-        return False
+    from .__init__ import __version__
 
-    def __str__ (self):
-        return "%s %s %s %s" % (self.major, self.minor, self.patch, self.pre_release)
-    __repr__= __str__
+    from .checksum import get_sha256_hash
+    from .str_util import *
+    from .lib_table import read_lib_table, write_lib_table
+    from .semver import Version, is_later_version
 
 
-def is_later_version (a, b):
-    ver_a = Version(a)
-    return ver_a.compare (Version(b))
-
+#
+# Platform dependent functions
+#
 def get_config_path (appname):
 
     if sys.platform == 'darwin':
@@ -103,11 +77,19 @@ def get_user_documents ():
 
     return user_documents
 
-def write_list(filename, list):
-    fw = open(filename, "w")
-    for s in list:
-        fw.write(s + "\n")
-    fw.close()
+
+def get_running_processes (appname):
+    processes = []
+    for p in psutil.process_iter():
+        try:
+            if p.name().lower().startswith(appname):
+                processes.append(p)
+        except psutil.Error:
+            pass
+
+    return processes
+#
+#
 
 
 def check_checksum(fname, checksum):
@@ -120,11 +102,11 @@ def check_checksum(fname, checksum):
 
     return True
 
-def make_folder (dir):
-    if not os.path.exists(dir):
+def make_folder (adir):
+    if not os.path.exists(adir):
         try:
-            os.makedirs(dir)
-        except Exception, e:
+            os.makedirs(adir)
+        except Exception:
             return False
     return True
 
@@ -141,9 +123,9 @@ def get_url_name (theurl):
     return theurl.rsplit ("/",1)[1]
 
 class MyURLopener(urllib.FancyURLopener):
-  def http_error_default(self, url, fp, errcode, errmsg, headers):
-    # handle errors the way you'd like to
-    urllib.URLopener.http_error_default (self, url, fp, errcode, errmsg, headers)
+    def http_error_default(self, url, fp, errcode, errmsg, headers):
+        # handle errors the way you'd like to
+        urllib.URLopener.http_error_default (self, url, fp, errcode, errmsg, headers)
 
 def get_unzipped(theurl, thedir, checksum):
     if not os.path.exists(thedir):
@@ -192,124 +174,7 @@ def get_unzipped(theurl, thedir, checksum):
     return True
 
 
-# get footprints and symbols at specific version from release server
-def get_tagged_version (version):
-    fp_dir = os.path.join(cache_path, "kicad-footprints-" + version )
-    lib_dir = os.path.join(cache_path, "kicad-library-" + version )
-    
-    if not os.path.exists (fp_dir):
-        print ("Getting footprints for " + version)
-        get_unzipped ("http://downloads.kicad-pcb.org/libraries/kicad-footprints-"+version+".zip", cache_path)
-    else:
-        print ("Already got " + fp_dir)
 
-    fp_libs = [f for f in os.listdir(fp_dir) if os.path.isdir(os.path.join(fp_dir, f))]
-
-    # symbols
-    if not os.path.exists (lib_dir):
-        print ("Getting symbols for " + version)
-        get_unzipped ("http://downloads.kicad-pcb.org/libraries/kicad-library-"+version+".zip", cache_path)
-    else:
-        print ("Already got " + lib_dir)
-
-    return fp_libs
-
-
-# git latest symbols/footprints via github
-def get_latest():
-
-    if False:
-        # get list of repos
-        print ("Getting list of repos from github")
-        full_list = []
-        page = 1
-        while True:
-            req = urllib2.Request('https://api.github.com/users/kicad/repos?page=%d' % page)
-            req.add_header('Accept', 'application/vnd.github.v3+json')
-            req.add_header('User-Agent', 'hairymnstr-kicad-fetcher')
-            res = urllib2.urlopen(req)
-            repos = json.loads(res.read())
-            for repo in repos:
-                full_list.append(repo['clone_url'])
-            if len(repos) < 30:
-                break
-            page += 1
-
-        repos_to_get = []
-        for repo in full_list:
-
-            repo_name = repo.rsplit('/', 1)[1]
-    
-            if repo_name.split(".", 1)[1] == "pretty.git":
-                print (repo, repo_name)
-                repos_to_get.append(repo)
-            elif  repo_name == "kicad-library.git":
-                repos_to_get.append(repo)
-
-    else:
-        repos_to_get = []
-        repos_to_get.append("https://github.com/KiCad/kicad-footprints.git")
-        repos_to_get.append("https://github.com/KiCad/kicad-symbols.git")
-
-    #  else:
-    #    if not args.quiet:
-    #      print ("ignore:", repo_name)
-
-    ##
-    write_list(os.path.join(cache_path, "list.txt"), repos_to_get)
-
-    fp_path = os.path.join(cache_path, "kicad-footprints" )   # was footprints-latest
-    #if not os.path.isdir(fp_path):
-    #    os.makedirs(fp_path)
-
-    for repo in repos_to_get:
-        repo_name = repo.rsplit('/', 1)[1]
-    
-        name = repo_name.rstrip(".git")
-
-        if repo_name.split(".", 1)[1] == "pretty.git":
-            path = os.path.join(cache_path, "footprints-latest" )
-            fp_libs.append (name)
-        elif repo_name == "kicad-footprints.git":
-            ##
-            #path = os.path.join(cache_path, "footprints-latest-v5" )
-            path = cache_path
-
-        else:
-            path = cache_path
-            ##name = "library-latest"
-
-        if os.path.isdir(os.path.join(path, name)):
-            if not args.quiet:
-                print ("Updating repo", repo_name)
-            pr = Popen(["git", "pull"], cwd=os.path.join(path, name), stdout=git_output)
-            pr.wait()
-        else:
-            cmd = ["git", "clone", repo, name]
-            if not args.quiet:
-                print ("Cloning repo", repo_name)
-            if not args.verbose:
-                # verbose mode
-                cmd.append("-q")
-
-            pr = Popen(cmd, cwd=path, stdout=git_output)
-            pr.wait()
-
-        #
-        if repo_name == "kicad-footprints.git":
-            #os.path.join(cache_path, "kicad-footprints" )
-
-            for root, dirnames, filenames in os.walk(fp_path):
-                for dirname in dirnames:
-                    if dirname.endswith (".pretty"):
-                        fp_libs.append (dirname)
-
-        elif repo_name == "kicad-symbols.git":
-            for filename in os.listdir(os.path.join(cache_path, "kicad-symbols")):
-                if filename.endswith (".lib"):
-                    sym_libs.append (filename)
-        
-    return fp_libs, sym_libs
 
 def get_zip (zip_url, target_path, checksum):
 
@@ -411,12 +276,6 @@ def get_git_branch_status (git_path, branch):
 
     return s
 
-def update_global_fp_table(publisher, package, version):
-    update_global_table("fp", fp_libs, os.path.join(cache_path, fp_local), publisher, package, version)
-
-def update_global_sym_table(publisher, package, version):
-    update_global_table("sym", sym_libs, os.path.join(cache_path, "kicad-symbols"), publisher, package, version)
-
 def update_global_table(table_type, update_libs, package_path, publisher, package, version):
 
     changes = False
@@ -472,17 +331,15 @@ def update_global_table(table_type, update_libs, package_path, publisher, packag
                     lib['type'] = u'KiCad'
                 else:
                     lib['type'] = u'Legacy'
-                if absolute:
-                    lib['uri'] = os.path.abspath(os.path.join(package_path, lib['name'] + ext))
-                else:
-                    lib['uri'] = "${KISYSMOD}/" + lib['name'] + ext
+                lib['uri'] = os.path.abspath(os.path.join(package_path, lib['name'] + ext))
+                #lib['uri'] = "${KISYSMOD}/" + lib['name'] + ext
                 lib['options'] = u'publisher=%s|package=%s|version=%s' % (publisher, package, version)
                 lib['descr'] = u'""'
 
                 if args.verbose:
                     print ("Insert: ", lib_name)
                 new_libs.append(lib)
-                changes = true
+                changes = True
 
     # finally, save the new lib-table
     if changes:
@@ -723,9 +580,9 @@ def is_writable (folder):
             return False
 
 
-def get_libs (target_path, file_spec, filter, find_dirs):
+def get_libs (target_path, file_spec, afilter, find_dirs):
     libs = []
-    if filter == "*/*":
+    if afilter == "*/*":
         if find_dirs:
             for root, dirnames, filenames in os.walk(target_path):
                 for dirname in dirnames:
@@ -738,9 +595,9 @@ def get_libs (target_path, file_spec, filter, find_dirs):
                         libs.append (os.path.join(root,filename))
 
     else:
-        if isinstance (filter, basestring):
-            filter = [filter]
-        for f in filter:
+        if isinstance (afilter, basestring):
+            afilter = [afilter]
+        for f in afilter:
             f = f.strip()
             path = target_path + os.sep + f
             if (os.path.isdir(path)):
@@ -750,19 +607,19 @@ def get_libs (target_path, file_spec, filter, find_dirs):
                     libs.append (filename)
     return libs
 
-def uninstall_libraries (target_path, type, filter, publisher, package_name, target_version):
+def uninstall_libraries (target_path, atype, filter, publisher, package_name, target_version):
 
-    if "footprint" in type:
+    if "footprint" in atype:
         update_global_table("fp", None, target_path, publisher, package_name, target_version)
 
-    if "symbol" in type:
+    if "symbol" in atype:
         update_global_table("sym", None, target_path, publisher, package_name, target_version)
 
-def install_libraries (target_path, type, filter, publisher, package_name, target_version):
+def install_libraries (target_path, atype, filter, publisher, package_name, target_version):
 
     files = []
 
-    if "footprint" in type:
+    if "footprint" in atype:
         # kicad_mod, other supported types
         libs = get_libs (target_path, ".pretty", filter, True)
 
@@ -773,7 +630,7 @@ def install_libraries (target_path, type, filter, publisher, package_name, targe
         else:
             print ("No footprint libraries found in %s" % target_path)
 
-    if "symbol" in type:
+    if "symbol" in atype:
         libs = get_libs (target_path, ".lib", filter, False)
         # future: .sweet
 
@@ -783,7 +640,7 @@ def install_libraries (target_path, type, filter, publisher, package_name, targe
         else:
             print ("No symbol libraries found in %s" % target_path)
 
-    if "3dmodel" in type:
+    if "3dmodel" in atype:
         libs = get_libs (target_path, ".wrl", filter, False)
         libs.extend (get_libs (target_path, ".step", filter, False))
        
@@ -810,7 +667,7 @@ def install_libraries (target_path, type, filter, publisher, package_name, targe
         else:
             print ("No 3D Models found in %s" % target_path)
 
-    if "template" in type:
+    if "template" in atype:
         # todo
         # could also check for 'meta' folder
         # also worksheet files?
@@ -832,7 +689,7 @@ def install_libraries (target_path, type, filter, publisher, package_name, targe
         else:
             print ("No templates found in %s" % target_path)
 
-    if "script" in type:
+    if "script" in atype:
         # check for simple vs complex scripts?
 
         scripts = get_libs (target_path, ".py", filter, False)
@@ -901,9 +758,10 @@ def write_config (filepath, data):
 
 def read_config (filepath):
     if os.path.exists (filepath):
-        with open(filepath, 'r') as stream:
+        with open(filepath, 'r') as f:
             try:
-                parsed = yaml.load(stream)  # parse file
+                data = f.read()
+                parsed = yaml.load(data)  # parse file
 
                 if parsed is None:
                     print("error: empty config file!")
@@ -936,20 +794,20 @@ def remove_installed (publisher, package_name, target_version):
         config['installed'] = new_list
 
 
-def add_installed (publisher, package_name, target_version, package_file, package_url, files, git_path):
+def add_installed (publisher, package_name, target_version, apackage_file, apackage_url, files, git_path):
     installed = None
     if "installed" in config:
         installed = config['installed']
 
-    if installed == None:
+    if installed is None:
         installed = []
 
     package = {}
     package['publisher'] = publisher
     package['package'] = package_name
     package['version'] = target_version
-    package['package_file'] = package_file
-    package['url'] = package_url
+    package['package_file'] = apackage_file
+    package['url'] = apackage_url
     package['files'] = files
     package['git_repo'] = git_path
 
@@ -1017,7 +875,7 @@ def get_package_file(_package_file):
         print ("error: No package file specified")
         return 1
 
-    if providers == None:
+    if providers is None:
         print ("error: No package info found")
         return 1
 
@@ -1044,10 +902,10 @@ def find_version (provider, target_version):
 
     return match_package
 
-def perform_actions(package_file, version, actions):
+def perform_actions(apackage_file, version, actions):
     
-    providers = read_package_info (package_file)
-    if providers == None:
+    providers = read_package_info (apackage_file)
+    if providers is None:
         return 1
 
     if version:
@@ -1056,7 +914,7 @@ def perform_actions(package_file, version, actions):
         target_version = "latest"
 
     changes = True
-    config ['default_package'] = package_file
+    config ['default_package'] = apackage_file
 
 #    if "download" in actions:
     for provider in providers:
@@ -1107,7 +965,7 @@ def perform_actions(package_file, version, actions):
                                             content['filter'] if "filter" in content else "*/*",
                                             provider['publisher'], provider['name'], target_version)
 
-                        add_installed (provider['publisher'], provider['name'], package['version'], package_file, package_url, files, git_path)
+                        add_installed (provider['publisher'], provider['name'], package['version'], apackage_file, package_url, files, git_path)
                         changes = True
 
                     else:
@@ -1117,7 +975,7 @@ def perform_actions(package_file, version, actions):
                                                 extract['filter'] if "filter" in extract else "*/*",
                                                 provider['publisher'], provider['name'], target_version)
 
-                            add_installed (provider['publisher'], provider['name'], package['version'], package_file, package_url, files, git_path)
+                            add_installed (provider['publisher'], provider['name'], package['version'], apackage_file, package_url, files, git_path)
                             changes = True
 
             elif "remove" in actions:
@@ -1143,13 +1001,45 @@ def perform_actions(package_file, version, actions):
     # for
 
     if changes and not args.test:
-        write_config (getlibs_config_file, config)
+        write_config (kipi_config_file, config)
 
     return 0
 #
 # main
 #
+
+args=None
+cache_path=""
+config=None
+default_package=""
+git_output=None
+kicad_config=""
+ki_packages3d_path=""
+ki_user_scripts=""
+ki_user_templates=""
+kipi_config_file=""
+package_info_dir=""
+package_info_search_path=""
+
+package_file=""
+package_url=""
+
 def main():
+    global args
+    global cache_path
+    global config
+    global default_package
+    global git_output
+    global kicad_config
+    global ki_packages3d_path
+    global ki_user_scripts
+    global ki_user_templates
+    global kipi_config_file
+    global package_info_dir
+    global package_info_search_path
+    global package_file
+    global package_url
+
     parser = argparse.ArgumentParser(description="Download and install KiCad data packages")
 
     parser.add_argument("package_file",     help="specifies the package to download/install", nargs='?')
@@ -1206,21 +1096,21 @@ def main():
     #else:
     #    kisysmod = args[0]
 
-    getlibs_config_folder = get_config_path("kipi")
-    getlibs_config_file = os.path.join (getlibs_config_folder, "kipi.cfg")
+    kipi_config_folder = get_config_path("kipi")
+    kipi_config_file = os.path.join (kipi_config_folder, "kipi.cfg")
 
-    if os.path.exists(getlibs_config_file):
-        config = read_config (getlibs_config_file)
+    if os.path.exists(kipi_config_file):
+        config = read_config (kipi_config_file)
     else:
         config = None
 
     if args.config:
-        if config == None:
+        if config is None:
             config = {}
             config ['default_package'] = "kicad-official-libraries-v5.yml"
         config ['cache_path'] = args.config # todo check/default?
-        make_folder (getlibs_config_folder)
-        write_config (getlibs_config_file, config)
+        make_folder (kipi_config_folder)
+        write_config (kipi_config_file, config)
         sys.exit(0)
 
     if not config:
@@ -1254,6 +1144,10 @@ def main():
 
     #
     have_git = git_check()
+
+    if (args.install or args.update or args.remove) and get_running_processes("kicad"):
+        print ("error: cannot modify installed packages while kicad is running")
+        sys.exit(2)
 
     if args.update:
         if "installed" in config and config['installed']:

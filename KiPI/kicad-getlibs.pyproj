@@ -14,7 +14,7 @@
     <InterpreterId />
     <InterpreterVersion />
     <CommandLineArguments>-l</CommandLineArguments>
-    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <EnableNativeCodeDebugging>True</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
@@ -29,7 +29,13 @@
     </Compile>
     <Compile Include="kicad_getlibs.py" />
     <Compile Include="lib_table.py" />
+    <Compile Include="semver.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="str_util.py" />
+    <Compile Include="template.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="__init__.py" />
   </ItemGroup>
   <Import Project="$(PtvsTargetsFile)" Condition="Exists($(PtvsTargetsFile))" />

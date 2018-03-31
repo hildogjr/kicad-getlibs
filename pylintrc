@@ -144,7 +144,9 @@ disable=fixme,
     deprecated-str-translate-call,
     superfluous-parens,
     too-many-arguments,
-    too-many-public-methods
+    too-many-public-methods,
+    bad-continuation,
+    unused-variable
 
 
 # Enable the message, report, category or checker with the given id(s). You can

@@ -1,5 +1,11 @@
 build/
 dist/
+
+misc/
+extra/
+
+*.zip
+*
 *.egg-info/
 *.egg
 *.pyc
