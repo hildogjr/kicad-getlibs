@@ -6,12 +6,12 @@ def read_fp_lib_table(filename):
 def read_sym_lib_table(filename):
     return read_lib_table (filename, "sym")
 
-def read_lib_table(filename, type):
+def read_lib_table(filename, atype):
     fr = open(filename, "r")
     d = fr.read()
     fr.close()
 
-    table_tag = "(" + type + "_lib_table"
+    table_tag = "(" + atype + "_lib_table"
 
     d = d[d.find(table_tag) + len(table_tag):]
 
@@ -41,10 +41,10 @@ def write_fp_lib_table(filename, libs):
 def write_sym_lib_table(filename, libs):
     write_lib_table (filename, "sym", libs)
 
-def write_lib_table(filename, type, libs):
+def write_lib_table(filename, atype, libs):
     fw = open(filename, "w")
 
-    if type == "fp":
+    if atype == "fp":
         fw.write("(fp_lib_table\n")
     else:
         fw.write("(sym_lib_table\n")
