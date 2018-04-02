@@ -3,9 +3,10 @@ dist/
 
 misc/
 extra/
+2018_03_31/
 
 *.zip
-*
+
 *.egg-info/
 *.egg
 *.pyc

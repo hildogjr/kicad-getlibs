@@ -37,6 +37,8 @@ if __package__ is None:
     from str_util import *
     from lib_table import read_lib_table, write_lib_table
     from semver import Version, is_later_version
+
+    import sexpdata
 else:
 
     from .__init__ import __version__
@@ -45,6 +47,7 @@ else:
     from .str_util import *
     from .lib_table import read_lib_table, write_lib_table
     from .semver import Version, is_later_version
+    import sexpdata
 
 
 class Paths():
@@ -652,6 +655,47 @@ def delete_files (files):
 
 
 
+def read_eeschema_config (path):
+    with open(path) as f:
+        config = f.read().split('\n')
+
+    return config
+
+def de_escape (s):
+    result = ""
+    in_escape = False
+    for c in s:
+        if in_escape:
+            result += c
+            in_escape = False
+        else:
+            if c== '\\':
+                in_escape = True
+            else:
+                result += c
+
+    return result
+
+def update_bom_script_entry (paths):
+    #
+    # get from eeschema config
+
+    config = read_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"))
+
+    bom_list_raw = [p for p in config if p.startswith ("bom_plugins")]
+
+    if len(bom_list_raw)==1:
+        bom_list_raw = after (bom_list_raw[0], "bom_plugins=")
+        bom_list_raw = de_escape (bom_list_raw)
+        bom_list = sexpdata.loads (bom_list_raw)
+
+        for plugin in bom_list[1:]:
+            print ("name = ", plugin[1].value())
+            print ("cmd = " , plugin[2][1])
+
+    # remove/add
+    # xsltproc -o "%O.csv" "C:\Program Files\KiCad\bin\scripting\plugins\bom_cvs.xsl" "%I"
+
 """
 footprint   (.pretty)
 symbol      (.lib)
@@ -828,6 +872,9 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
             files = copy_files (scripts, path, paths.ki_user_scripts_dir)
         else:
             print ("No scripts found in %s" % target_path)
+
+    if "bom-script" in atype:
+        update_bom_script_config ()
 
     return files
 
@@ -1173,6 +1220,8 @@ class Kipi():
             print ("error: package name %s not installed" % package_name)
             return 2
 
+    def test(self):
+        update_bom_script_entry (self.paths)
 
 
     def run(self):
@@ -1247,6 +1296,9 @@ class Kipi():
 
         # ~/.kicad_plugins/
         # C:\Users\bob\AppData\Roaming \kicad \scripts
+
+        #
+        #self.test()
 
         #
         have_git = git_check()
