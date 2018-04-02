@@ -13,6 +13,12 @@ Example script to create a package info file for kicad-getlibs.
 import os
 import yaml
 import zipfile
+import sys
+
+common = os.path.abspath(os.path.join(sys.path[0], "..", 'kipi'))
+if not common in sys.path:
+    sys.path.append(common)
+
 from checksum import get_sha256_hash
 
 def write_package_file (filepath, data):
@@ -66,7 +72,7 @@ versions = []
 versions.append (make_version ("scripts", "1.0.0-rc1"))
 versions.append (make_version ("scripts", "1.0.0-rc2"))
 versions.append (make_version ("scripts", "1.0.0"))
-#versions.append (make_version ("scripts", "1.0.1"))
+versions.append (make_version ("scripts", "1.0.1"))
 
 package = {}
 package ['publisher'] = publisher

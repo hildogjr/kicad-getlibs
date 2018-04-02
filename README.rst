@@ -14,7 +14,7 @@ official v5 libraries and templates, SparkFun, DigiKey and Walter Lain libraries
 Typically where available, point releases are downloaded as a zip file. Otherwise, latest
 versions of git repositories can be cloned locally.
 
-This script uses git to:
+This script can use git to:
 
 1. Clone a repository if you don't have it
 2. Pull the latest repository if you already have it locally (does an update).
@@ -32,33 +32,39 @@ Existing xx-lib-table will be saved to xx-lib-table-old.
 Usage
 -----
 
-`kipi [options] <package file> [<version>]`
+`kipi [options] <package spec> [<version>]`
 
-Package file contains the packages to download/install.
+Package spec contains the packages to download/install.
 Version is a valid version from the package file or "latest".
 
 Options are:
 
--h, --help  Shows a help screen on the command line
+-h, --help  shows a help screen on the command line
 
--v, --verbose  Shows the verbose messages
+-v, --verbose  show verbose messages
 
--q, --quiet  Don't show logging
+-q, --quiet  don't show logging
 
--c, --config <local folder>  Configure get-libs. The local folder is the folder you want all your local data put in.
+-t, --test  dry run, don't perform actions
 
--d, --download  Download package data only
+--config <local folder>  configure kipi. The local folder is the folder you want all your local data put in.
 
--i, --install  Install package data into KiCad (implies download)
+--download  download package data only
 
--u, --uninstall  Uninstall package data from KiCad
+--install  install package data into KiCad (implies download)
+
+--list  list installed packages
+
+--remove  remove an installed package from KiCad
+
+--update  update installed packages
 
 
 **Example Usage**
 
-`kipi -c c:\\kicad_data`
+`kipi --config c:\\kicad_data`
 
-`kipi -vi kicad-official-libraries-v5.yml`
+`kipi -v --install https://raw.githubusercontent.com/bobc/kicad-getlibs/master/packages/kicad-official-libraries-v5-no-3d.yml`
 
 **Dependencies**
 
@@ -76,3 +82,46 @@ Credits
 -------
 
 KiPI is derived from project https://github.com/hairymnstr/kicad-getlibs.
+
+
+Content Types
+=============
+
+====================  ==========  ==========
+Content type          Kicad v4    KiCad v5
+====================  ==========  ==========
+footprint             Yes         Yes
+symbol                No          Yes
+3dmodel               Yes*        Yes*
+template              Yes         Yes
+script                No          Yes
+====================  ==========  ==========
+
+Footprint
+----------
+Footprints are installed in global fp-lib-table.
+
+Symbol
+-------
+- [v5] Symbols are installed in global sym-lib-table.
+- [v4] Installing symbols is not supported because sym-lib-table is not supported in v4
+
+3dmodel
+--------
+3dmodels can be installed if KISYS3DMOD is a writable location by user and does
+not require admin permissions. On Windows the default path c:\\program files\\...
+is not writable, so the user must re-configure KISYS3DMOD to writable location,
+e.g "C:\\kicad_data\\3dmodels"
+
+Template
+---------
+Templates are installed to user's templates folder.
+
+Script
+-------
+Scripts may be pcbnew scripts or footprints wizards.
+
+- [v5] Scripts are copied to global kicad/scripting folder.
+- [v4] May work on Linux but does not work on Windows since v4 does not have a search path for user scripts.
+
+

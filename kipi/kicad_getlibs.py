@@ -156,12 +156,30 @@ def make_folder (adir):
 
 
 def get_url(theurl, name):
+    #try:
+    #    name, hdrs = urllib.urlretrieve(theurl, name)
+    #except IOError, e:
+    #    print ("error: Can't retrieve %r to %r: %s" % (theurl, name, e))
+    #    return False
+    #return True
+
     try:
-        name, hdrs = urllib.urlretrieve(theurl, name)
+        # name, hdrs = urllib.urlretrieve(theurl, name)
+        _opener = MyURLopener()
+        _opener.retrieve(theurl, name)
+        return True
     except IOError, e:
-        print ("error: Can't retrieve %r to %r: %s" % (theurl, name, e))
+        if e.errno is None:
+            s = ""
+            for a in e:
+                if isinstance(a, str):
+                    s += a + " "
+                elif isinstance(a, int):
+                    s += str(a) + " "
+            print ("error: can't get %r: %s" % (theurl, s))
+        else:
+            print ("error: Can't save to %r: IOError(%d) %s" % (name, e.errno, e.strerror ) )
         return False
-    return True
 
 def get_url_name (theurl):
     return theurl.rsplit ("/",1)[1]
@@ -537,8 +555,11 @@ def copy_files (files, source_path, dest_path):
                 copied_files.append (adir)
 
         if args.test:
-            # print ("Would copy %s to %s" % (filename, dest_file))
-            pass
+            if count < 10:
+                print ("Would create %s" % (dest_file))
+            elif count == 10 and len(files) > 10:
+                print ("Would copy %d others (omitted)" % (len(files)-10))
+            
         else:
             if args.verbose:
                 print ("copying %s to %s" % (filename, dest_file))
@@ -991,7 +1012,9 @@ class Kipi():
                 self.package_file = os.path.join (self.paths.package_info_dir, get_url_name (_package_file))
                 self.package_file = change_extension (self.package_file, ".yml")
                 make_folder (self.paths.package_info_dir)
-                get_url (_package_file, self.package_file)
+                if not get_url (_package_file, self.package_file):
+                    #print ("error retrieving %s" % _package_file)
+                    return 1
             else:
                 self.package_url = None
                 if not _package_file.endswith (".yml"):
@@ -1143,9 +1166,13 @@ class Kipi():
                 write_config (self.paths.kipi_config_filename, self.config)
            
             return 0    
-        else:
+        elif len(packages) > 1:
             print ("error: package name %s is ambiguous" % package_name)
             return 2
+        else:
+            print ("error: package name %s not installed" % package_name)
+            return 2
+
 
 
     def run(self):
@@ -1201,9 +1228,9 @@ class Kipi():
         self.paths.cache_dir = self.config['cache_path']
         self.default_package_file = self.config ['default_package']
 
-        package_info_dir = os.path.join (self.paths.cache_dir, "packages")
+        self.paths.package_info_dir = os.path.join (self.paths.cache_dir, "packages")
 
-        package_info_search_path = [".", package_info_dir, "../packages"]
+        self.paths.package_info_search_path = [".", self.paths.package_info_dir, "../packages"]
 
         user_documents = get_user_documents()
         self.paths.kicad_config_dir = get_config_path("kicad")
@@ -1269,7 +1296,7 @@ class Kipi():
 
         elif args.catalog:
             # 
-            files = find_files (package_info_search_path, "*.yml")
+            files = find_files (self.paths.package_info_search_path, "*.yml")
 
             print ("Local package info files:")
             print ("")
@@ -1283,8 +1310,8 @@ class Kipi():
 
         elif args.list:
             if "installed" in self.config and self.config['installed']:
-                print ("%-15s %-35s %s" % ("Publisher", "Package name", "Installed Version (latest)") )
-                print ('-' * (15+1+35+28))
+                print ("%-15s %-35s %-28s %s" % ("Publisher", "Package name", "Installed Version (latest)", "Source") )
+                print ('-' * (15+1+35+1+28+1+10))
                 for package in self.config['installed']:
                     # get from url?
                     # only if flag?
@@ -1310,12 +1337,15 @@ class Kipi():
                         else:
                             s += " git: unknown"
                     else:
-                        s += " %s" % package['version']
+                        ver = package['version']
                         if latest_package and is_later_version (latest_package['version'], package ['version']):
-                            s += " (latest %s)" % latest_package['version']
+                            ver += " (latest %s)" % latest_package['version']
+                        s += " %-28s" % ver
 
                     if package['url']:
-                        s += "%s" % package['url']
+                        s += " %s" % package['url']
+                    elif "file" in package and package['file']:
+                        s += " %s" % package['file']
 
                     print (s)
 

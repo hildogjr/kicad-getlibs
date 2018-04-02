@@ -25,7 +25,7 @@ setup(
 
     version=kipi.__version__,  # Required
 
-    description='A tool for downloading and installing kiCad packages',  # Required
+    description='A tool for downloading and installing KiCad packages',  # Required
 
     long_description=long_description,  # Optional
 
@@ -71,7 +71,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['psutil', 'yaml'],  # Optional
+    install_requires=['psutil', 'pyyaml'],  # Optional
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
@@ -107,8 +107,6 @@ setup(
     # `pip` to create the appropriate form of executable for the target
     # platform.
     #
-    # For example, the following would provide a command called `sample` which
-    # executes the function `main` from this package when invoked:
     entry_points={  # Optional
         'console_scripts': [
             'kipi=kipi.kicad_getlibs:main',
