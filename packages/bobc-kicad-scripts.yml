@@ -9,4 +9,4 @@ bobc-kicad-scripts:
           cache: no
           url: https://github.com/bobc/kicad-utils.git
           type: script
-          filter: "kicad-utils/scripts/footprint-wizards/*.*"
+          filter: "scripts/footprint-wizards/*.*"

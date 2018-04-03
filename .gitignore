@@ -2,7 +2,8 @@ build/
 dist/
 
 misc/
-extra/
+#extras/
+
 2018_03_31/
 
 *.zip

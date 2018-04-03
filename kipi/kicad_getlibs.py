@@ -37,6 +37,7 @@ if __package__ is None:
     from str_util import *
     from lib_table import read_lib_table, write_lib_table
     from semver import Version, is_later_version
+    from sexpdata import Symbol
 
     import sexpdata
 else:
@@ -47,18 +48,27 @@ else:
     from .str_util import *
     from .lib_table import read_lib_table, write_lib_table
     from .semver import Version, is_later_version
+    from .sexpdata import Symbol
+
     import sexpdata
 
 
 class Paths():
     def __init__(self):
+        # KiCad paths
         self.kicad_config_dir=""
 
-        self.ki_packages3d_dir=""
+        # from KISYS3DMOD
+        self.ki_packages3d_dir=None
         self.ki_user_scripts_dir=""
         self.ki_user_templates_dir=""
-        self.ki_portable_templates_dir=""
+        # from KICAD_PTEMPLATES
+        self.ki_portable_templates_dir=None
 
+        # aka KIGITHUB
+        self.ki_github_url = None
+
+        # kipi paths
         self.cache_dir=""
         self.package_info_dir=""
 
@@ -150,7 +160,7 @@ def check_checksum(fname, checksum):
     return True
 
 def make_folder (adir):
-    if not os.path.exists(adir):
+    if not os.path.isdir(adir):
         try:
             os.makedirs(adir)
         except OSError:
@@ -263,6 +273,24 @@ def get_zip (zip_url, target_path, checksum):
             print ("Getting zip from " + zip_url)
             return get_unzipped (zip_url, target_path, checksum)
 
+#
+# functions calling external git
+#
+def git_check ():
+    cmd = ["git", "version"]
+
+    p = Popen(cmd, shell=True, stdout=subprocess.PIPE)
+    out, err = p.communicate()
+    #print (p.returncode, out, err)
+    lines = out.split('\n')
+
+    if out.startswith ("git version"):
+        return True
+    else:
+        # print ("Warning : git is not installed!")
+        return False
+
+
 def git_clone_or_update (repo_url, target_path, target_name, git_output):
   
     repo_name = repo_url.rsplit('/', 1)[1]
@@ -283,7 +311,7 @@ def git_clone_or_update (repo_url, target_path, target_name, git_output):
         if args.test:
             print ("Would clone repo %s to %s" % (repo_name, os.path.join(target_path, target_name) ))
         else:
-            os.makedirs(target_path)
+            make_folder(target_path)
 
             cmd = ["git", "clone", repo_url, target_name]
             if not args.quiet:
@@ -341,6 +369,8 @@ def get_git_branch_status (git_path, branch):
 
     return s
 
+#
+#
 def remove_table_entries (kicad_config_dir, table_type, publisher, package):
 
     changes = False
@@ -661,6 +691,20 @@ def read_eeschema_config (path):
 
     return config
 
+def write_eeschema_config (path, config):
+    with open(path, "w") as f:
+        f.write('\n'.join(config))
+
+def update_config (config, key, value):
+    new_config = []
+    for p in config:
+        if before(p,'=') == key:
+            new_config.append (key + '=' + value)
+        else:
+            new_config.append(p)
+    return new_config
+    
+
 def de_escape (s):
     result = ""
     in_escape = False
@@ -676,25 +720,80 @@ def de_escape (s):
 
     return result
 
-def update_bom_script_entry (paths):
-    #
-    # get from eeschema config
+def escape (s):
+    result = ""
+    for c in s:
+        if c == '\\':
+            result += '\\' + c
+        else:
+            result += c
 
+    return result
+
+def remove_bom_plugin_entry (paths, name):
+    # get list of current plugins from eeschema config
     config = read_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"))
+    bom_plugins_raw = [p for p in config if p.startswith ("bom_plugins")]
 
-    bom_list_raw = [p for p in config if p.startswith ("bom_plugins")]
+    new_list = []
+    new_list.append (Symbol("plugins"))
+    changes = False
 
-    if len(bom_list_raw)==1:
-        bom_list_raw = after (bom_list_raw[0], "bom_plugins=")
-        bom_list_raw = de_escape (bom_list_raw)
-        bom_list = sexpdata.loads (bom_list_raw)
+    if len(bom_plugins_raw) == 1:
+        bom_plugins_raw = after (bom_plugins_raw[0], "bom_plugins=")
+        bom_plugins_raw = de_escape (bom_plugins_raw)
+
+        # print (bom_plugins_raw)
+        bom_list = sexpdata.loads (bom_plugins_raw)
 
         for plugin in bom_list[1:]:
-            print ("name = ", plugin[1].value())
-            print ("cmd = " , plugin[2][1])
+            #print ("name = ", plugin[1].value())
+            #print ("cmd = " , plugin[2][1])
+            if plugin[1].value() == name:
+                # we want to delete this entry
+                if args.verbose:
+                    print ("Removing %s" % name)
+                changes = True
+            else:
+                new_list.append (plugin)
 
-    # remove/add
-    # xsltproc -o "%O.csv" "C:\Program Files\KiCad\bin\scripting\plugins\bom_cvs.xsl" "%I"
+    if changes and not args.test:
+        s = sexpdata.dumps (new_list)
+        # save into config
+        config = update_config (config, "bom_plugins", escape(s))
+        write_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"), config)
+
+# xsltproc -o "%O.csv" "C:\Program Files\KiCad\bin\scripting\plugins\bom_cvs.xsl" "%I"
+
+def add_bom_plugin_entry (paths, name, cmd):
+    # get from eeschema config
+    config = read_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"))
+    bom_plugins_raw = [p for p in config if p.startswith ("bom_plugins")]
+
+    new_list = []
+    new_list.append (Symbol("plugins"))
+
+    if len(bom_plugins_raw)==1:
+        bom_plugins_raw = after (bom_plugins_raw[0], "bom_plugins=")
+        bom_plugins_raw = de_escape (bom_plugins_raw)
+
+        #print (bom_plugins_raw)
+        bom_list = sexpdata.loads (bom_plugins_raw)
+
+        for plugin in bom_list[1:]:
+            #print ("name = ", plugin[1].value())
+            #print ("cmd = " , plugin[2][1])
+            new_list.append (plugin)
+
+    if not args.test:
+        if args.verbose:
+            print ("Adding %s" % name)
+        new_list.append([Symbol('plugin'), Symbol(name), [Symbol('cmd'), cmd]])
+        s = sexpdata.dumps (new_list)
+
+        # save into config
+        config = update_config (config, "bom_plugins", escape(s))
+        write_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"), config)
 
 """
 footprint   (.pretty)
@@ -705,7 +804,9 @@ script      (.py)
 
 worksheet file   (.wks)
 
-bom script       (.py, .xsl)
+bom plugin (eeschema)  (.py, .xsl)
+netlist plugin (eeschema)  (.py, .xsl)
+
 footprint wizard (.py)
 action plugin    (.py)
 other script?    (.py)
@@ -780,6 +881,10 @@ def uninstall_libraries (paths, atype, publisher, package_name):
 
     if atype is None or "symbol" in atype:
         remove_table_entries(paths.kicad_config_dir, "sym", publisher, package_name)
+
+    #todo:
+    if atype is not None and "bom-plugin" in atype:
+        remove_bom_plugin_entry (paths, package_name)
 
 def install_libraries (paths, target_path, atype, afilter, publisher, package_name, target_version):
 
@@ -873,8 +978,9 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
         else:
             print ("No scripts found in %s" % target_path)
 
-    if "bom-script" in atype:
-        update_bom_script_config ()
+    if "bom-plugin" in atype:
+        # remove_bom_plugin_entry ()
+        add_bom_plugin_entry (paths, name, cmd)
 
     return files
 
@@ -944,16 +1050,7 @@ def read_config (filepath):
         return None
 
 
-def git_check ():
-    os.system('git version > tmp' )
 
-    info = open('tmp', 'r').read()
-
-    if info.startswith ("git version"):
-        return True
-    else:
-        print ("Warning : git is not installed!")
-        return False
 
 def find_file (search_path, filename):
     for p in search_path:
@@ -1067,6 +1164,7 @@ class Kipi():
                 if not _package_file.endswith (".yml"):
                     _package_file = change_extension (_package_file, ".yml")
                 self.package_file = find_file ( self.paths.package_info_search_path, _package_file)
+                self.package_file = os.path.abspath (self.package_file)
                 
             if os.path.exists (self.package_file):
                 providers = read_package_info (self.package_file)
@@ -1130,11 +1228,15 @@ class Kipi():
                 if "download" in actions:
                     url = content['url']
                     if url.endswith(".git"):
-                        git_path = os.path.join (self.paths.cache_dir, provider['publisher'], provider['name'], content['name'])
-                        git_clone_or_update (url, git_path, actual_version, self.git_output)
+                        if self.git_test():
+                            git_path = os.path.join (self.paths.cache_dir, provider['publisher'], provider['name'], content['name'])
+                            git_clone_or_update (url, git_path, actual_version, self.git_output)
 
-                        git_path = os.path.join (git_path, actual_version)
-                        ok = True
+                            git_path = os.path.join (git_path, actual_version)
+                            ok = True
+                        else:
+                            print ("Skipping %s" % content['name'])
+                            ok = False
                     else:
                         # get zip
                         git_path = None
@@ -1221,8 +1323,21 @@ class Kipi():
             return 2
 
     def test(self):
-        update_bom_script_entry (self.paths)
+        remove_bom_plugin_entry (self.paths, "fred")
+        #add_bom_plugin_entry (self.paths, "fred", 'mycmd "arg1" "arg2"')
 
+    def git_test(self):
+        if not self.git_checked:
+            self.have_git = git_check()
+            self.git_checked = True
+
+        if self.have_git:
+            return True
+        else:
+            if not self.git_message:
+                print ("error: git is required but is not installed")
+                self.git_message = True
+            return False
 
     def run(self):
 
@@ -1284,10 +1399,16 @@ class Kipi():
         user_documents = get_user_documents()
         self.paths.kicad_config_dir = get_config_path("kicad")
 
-        self.paths.ki_packages3d_dir = os.environ['KISYS3DMOD']
+        if 'KIGITHUB' in os.environ:
+            self.paths.ki_github_url = os.environ['KIGITHUB']
+
+        if 'KISYS3DMOD' in os.environ:
+            self.paths.ki_packages3d_dir = os.environ['KISYS3DMOD']
+
         # also system templates?
         self.paths.ki_user_templates_dir = os.path.join(user_documents, "kicad", "template")
-        self.paths.ki_portable_templates_dir = os.environ['KICAD_PTEMPLATES']
+        if 'KICAD_PTEMPLATES' in os.environ:
+            self.paths.ki_portable_templates_dir = os.environ['KICAD_PTEMPLATES']
 
         self.paths.ki_user_scripts_dir = os.path.join(self.paths.kicad_config_dir, "scripting")
 
@@ -1299,9 +1420,13 @@ class Kipi():
 
         #
         #self.test()
+        #return 1
 
         #
-        have_git = git_check()
+        self.git_message = False
+        self.git_checked = False
+        #self.have_git = git_check()
+        
 
         if (args.install or args.update or args.remove) and get_running_processes("kicad"):
             print ("error: cannot modify installed packages while kicad is running")
@@ -1327,6 +1452,7 @@ class Kipi():
                                                               latest_package['version'] if latest_package else "") )
                         update_packages.append(package)
 
+                #
                 if len(update_packages) > 0:
                     ans = raw_input( "Update packages [Y] ? ")
                     if ans == "" or ans.lower().startswith("y"):
@@ -1336,7 +1462,8 @@ class Kipi():
                             # remove_package (package)
 
                             self.package_url = package['url']
-                            self.remove (package['package_file'], package['version'])
+
+                            self.remove (package['publisher'], package['package'])
 
                             self.install (package['package_file'], latest_package['version'], "download,install")
 
@@ -1379,13 +1506,16 @@ class Kipi():
                     s = "%-15s %-35s" % (package['publisher'], package['package']) 
             
                     if package['version'] == "latest":
-                        if "git_repo" in package:
-                            s += " git: %s" % get_git_status (package['git_repo'])
+                        if self.git_test():
+                            if "git_repo" in package:
+                                s += " git: %s" % get_git_status (package['git_repo'])
 
-                            branch = get_git_branch_name (package['git_repo'])
-                            status = get_git_branch_status (package['git_repo'], branch)
-                            if s:
-                                s += " (%s)" % status
+                                branch = get_git_branch_name (package['git_repo'])
+                                status = get_git_branch_status (package['git_repo'], branch)
+                                if s:
+                                    s += " (%s)" % status
+                            else:
+                                s += " git: unknown"
                         else:
                             s += " git: unknown"
                     else:
