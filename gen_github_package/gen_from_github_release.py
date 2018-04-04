@@ -1,6 +1,6 @@
 
 """
-Create a package info file for kicad-getlibs from github releases for a specified github
+Create a package info file for kipi from github releases for a specified github
 repository. This script uses the github API.
 
 usage: gen_from_github_release <git user> <git repository name> [<content_types>]
@@ -13,16 +13,16 @@ e.g. gen_from_github_release bobc kicad-utils
 import argparse
 import os
 import sys
-import yaml
 import zipfile
 import requests
 import json
 import urllib
 import tempfile
 
+import yaml
+
 sys.path.append ("../KiPI")
 from checksum import get_sha256_hash
-
 
 
 def write_package_file (filepath, data):
@@ -111,7 +111,7 @@ def generate_info (git_user, git_repo, content_type):
 #
 
 parser = argparse.ArgumentParser(
-    description="Create a package info file for kicad-getlibs from github releases for a specified github repository.")
+    description="Create a package info file for kipi from github releases for a specified github repository.")
 
 parser.add_argument("github_user", help="the github user name")
 parser.add_argument("github_repo", help='the github repository name')

@@ -31,10 +31,24 @@ def zipdir(path, ziph):
         for file in files:
             ziph.write(os.path.join(root, file))
 
-def make_zip (folder, zip_name):
+def make_zip (name, version, files):
+    zip_name = name + "-" + version + ".zip"
+
     zipf = zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED)
-    zipdir(folder, zipf)
+
+    #zipdir(folder, zipf)
+    for file in files:
+        ziph.write(file)
+
     zipf.close()
+
+def get_files (path, spec):
+
+    files = os.listdir(os.path.join (path,spec))
+#
+#
+#
+
 
 def make_version (name, version):
 #
@@ -47,7 +61,7 @@ def make_version (name, version):
 
     content1 = {}
     content1 ['name'] = "footprint-wizard"
-    content1 ['cache'] = "no"
+    #content1 ['cache'] = "no"
     content1 ['url'] = "https://raw.githubusercontent.com/bobc/kicad-utils/v5/%s" % zip_name
     content1 ['checksum'] = "SHA-256:" + zip_hash
     content1 ['size'] = int(os.path.getsize(zip_name))

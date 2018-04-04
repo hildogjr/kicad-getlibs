@@ -19,5 +19,6 @@ def get_md5_hash (fname):
 def get_sha256_hash (fname):
     return hash_bytestr_iter(file_as_blockiter(open(fname, 'rb')), hashlib.sha256(), True)
 
+
 def get_sha256_hash_by_handle (fhandle):
     return hash_bytestr_iter(file_as_blockiter(fhandle), hashlib.sha256(), True)

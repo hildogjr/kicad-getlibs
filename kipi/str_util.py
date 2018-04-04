@@ -9,10 +9,11 @@ def before(value, a):
     pos_a = value.find(a)
     if pos_a == -1: return ""
     return value[0:pos_a]
-    
+
+# this is modified fromn the original, use find instead of rfind    
 def after(value, a):
     # Find and validate first part.
-    pos_a = value.rfind(a)
+    pos_a = value.find(a)
     if pos_a == -1: return ""
     # Returns chars after the found string.
     adjusted_pos_a = pos_a + len(a)

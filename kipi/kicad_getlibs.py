@@ -104,6 +104,55 @@ class PackageSet():
     def __init__(self):
         self.packages = []
 
+class Path ():
+
+    def __init__(self, s = None):
+        if s:
+            self.assign (s)
+        else:
+            self.parts = []
+            self.filespec = None
+            self.recurse = False
+
+    def assign (self, s):
+        self.parts = s.split("/")
+
+        last = self.parts[-1] if len(self.parts)>0 else None
+
+        self.filespec = None
+        self.recurse = False
+
+        if last == "":
+            self.parts = self.parts[:-1]
+            last = self.parts[-1] if len(self.parts)>0 else None
+        
+        if last == '*' or last=='*.*' or ('.' in last and last != '...'):
+            self.filespec = last
+
+            self.parts = self.parts[:-1]
+            last = self.parts[-1] if len(self.parts)>0 else None
+
+        if last == "...":
+            self.recurse = True
+            self.parts = self.parts[:-1]
+
+    def get_path (self, path):
+        result = os.path.join (path, os.sep.join (self.parts))
+        if self.filespec:
+            result += os.path.join (result, self.filespec)
+        return result
+
+    def __str__ (self):
+        s = os.sep.join (self.parts) + ' _ ' 
+        if self.recurse:
+            s += '...' 
+        s += ' _ '
+        if self.filespec:
+            s += self.filespec
+        return s
+
+    __repr__ = __str__
+
 #
 # Platform dependent functions
 #
@@ -163,7 +212,8 @@ def make_folder (adir):
     if not os.path.isdir(adir):
         try:
             os.makedirs(adir)
-        except OSError:
+        except OSError as ex:
+            print ("error creating %s: %s" % (adir, ex.strerror))
             return False
     return True
 
@@ -203,8 +253,8 @@ class MyURLopener(urllib.FancyURLopener):
         urllib.URLopener.http_error_default (self, url, fp, errcode, errmsg, headers)
 
 def get_unzipped(theurl, thedir, checksum):
-    if not os.path.exists(thedir):
-        os.makedirs(thedir)
+    if not make_folder (thedir):
+        return False
 
     name = os.path.join(thedir, 'temp.zip')
     try:
@@ -238,11 +288,15 @@ def get_unzipped(theurl, thedir, checksum):
         #print ("Error: bad hash, expected %s got %s" % ( checksum, hash))
         return False
     #
+    return unzip_zip (thedir, name)
+
+
+def unzip_zip(thedir, name):
     try:
         print ("Unzipping %s" % name)
         z = zipfile.ZipFile(name)
     except zipfile.error, e:
-        print ("error: Bad zipfile (from %r): %s" % (theurl, e))
+        print ("error: Bad zipfile: %s" % (e))
         return False
     z.extractall(thedir)
     z.close()
@@ -264,6 +318,13 @@ def get_zip (zip_url, target_path, checksum):
 
     if zip_present:
         print ("Already got " + target_path)
+        # check if zip expanded?
+
+        files = os.listdir(target_path)
+        if len(files)==1:
+            # unzip
+            return unzip_zip (target_path, zip_name)
+
         return True
     else:
         if args.test:
@@ -567,11 +628,11 @@ def copy_files (files, source_path, dest_path):
         print ("Copying files..", end='')
 
     # todo: root folder?
-    if not os.path.exists (dest_path):
+    if not os.path.isdir (dest_path):
         if args.test:
             print ("Would create %s " % dest_path)
         else:
-            os.makedirs(dest_path)
+            make_folder(dest_path)
             copied_files.append (dest_path)
 
     for filename in files:
@@ -580,11 +641,11 @@ def copy_files (files, source_path, dest_path):
         dest_file = os.path.join (dest_path, rel_path)
             
         adir = os.path.dirname (dest_file)
-        if not os.path.exists (adir):
+        if not os.path.isdir (adir):
             if args.test:
                 print ("Would create %s " % adir)
             else:
-                os.makedirs(adir)
+                make_folder(adir)
                 copied_files.append (adir)
 
         if args.test:
@@ -613,11 +674,11 @@ def copy_folders (folders, source_path, dest_path):
     copied_files = []
 
     # note: caller should create root folder
-    if not os.path.exists (dest_path):
+    if not os.path.isdir (dest_path):
         if args.test:
             print ("Would create %s " % dest_path)
         else:
-            os.makedirs(dest_path)
+            make_folder(dest_path)
 
     count = 0
     interval = len(folders) / 10 + 1
@@ -849,6 +910,7 @@ def is_writable (folder):
 
 def get_libs (target_path, file_spec, afilter, find_dirs):
     libs = []
+
     if afilter == "*/*":
         if find_dirs:
             for root, dirnames, filenames in os.walk(target_path):
@@ -858,17 +920,23 @@ def get_libs (target_path, file_spec, afilter, find_dirs):
         else:
             for root, dirnames, filenames in os.walk(target_path):
                 for filename in filenames:
-                    if filename.endswith (file_spec):
+                    if file_spec == '*.*' or filename.endswith (file_spec):
                         libs.append (os.path.join(root,filename))
 
     else:
         if isinstance (afilter, basestring):
             afilter = [afilter]
+
         for f in afilter:
             f = f.strip()
+
+            #p = Path(f)
+            #print (f + " => " + str(p))
+
             path = target_path + os.sep + f
             if (os.path.isdir(path)):
                 path = os.path.join (path, "*.*")
+
             for filename in glob.glob(path):
                 if filename.endswith (file_spec):
                     libs.append (filename)
@@ -886,7 +954,7 @@ def uninstall_libraries (paths, atype, publisher, package_name):
     if atype is not None and "bom-plugin" in atype:
         remove_bom_plugin_entry (paths, package_name)
 
-def install_libraries (paths, target_path, atype, afilter, publisher, package_name, target_version):
+def install_libraries (paths, target_path, atype, afilter, publisher, package_name, target_version, content):
 
     files = []
 
@@ -962,13 +1030,14 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
 
     if "script" in atype:
         # check for simple vs complex scripts?
+        # non-python scripts?
 
         scripts = get_libs (target_path, ".py", afilter, False)
 
         if len(scripts) > 0:
             print ("Scripts : ", len(scripts))
 
-            if isinstance (afilter, basestring):
+            if isinstance (afilter, basestring) and afilter != "*/*":
                 path = get_path (target_path + os.sep + afilter)
             else:
                 path = target_path
@@ -979,8 +1048,32 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
             print ("No scripts found in %s" % target_path)
 
     if "bom-plugin" in atype:
-        # remove_bom_plugin_entry ()
-        add_bom_plugin_entry (paths, name, cmd)
+        scripts = get_libs (target_path, "*.*", afilter, False)
+        
+        scripts = [p for p in scripts if not p.endswith(".zip")]
+
+        # remove_bom_plugin_entry () ?
+
+        if len(scripts) > 0:
+            print ("BOM Plugins : ", len(scripts))
+
+            if isinstance (afilter, basestring) and afilter != "*/*":
+                path = get_path (target_path + os.sep + afilter)
+            else:
+                path = target_path
+
+            make_folder (paths.ki_user_scripts_dir)
+            files = copy_files (scripts, path, paths.ki_user_scripts_dir)
+
+            cmd = content['cmd']
+            if '${BOM_SCRIPT}' in cmd:
+                cmd = cmd.replace ('${BOM_SCRIPT}', paths.ki_user_scripts_dir)
+
+            add_bom_plugin_entry (paths, content['name'], cmd)
+
+        else:
+            print ("No scripts found in %s" % target_path)
+
 
     return files
 
@@ -1104,6 +1197,10 @@ class Kipi():
         self.default_package_file=""
         self.package_file=""
         self.package_url=""
+
+        self.have_git = False
+        self.git_message = False
+        self.git_checked = False
 
     def remove_installed (self, publisher, package_name):
 
@@ -1250,7 +1347,8 @@ class Kipi():
                         if "type" in content:
                             files = install_libraries (self.paths, target_path, 
                                                        content['type'], content['filter'] if "filter" in content else "*/*",
-                                                       provider['publisher'], provider['name'], actual_version)
+                                                       provider['publisher'], provider['name'], actual_version,
+                                                       content)
 
                             self.add_installed (provider['publisher'], provider['name'], package['version'], 
                                                 apackage_file, self.package_url, content['type'],
@@ -1261,7 +1359,8 @@ class Kipi():
                             for extract in content['extract']:
                                 files = install_libraries (self.paths, target_path,
                                                            extract['type'], extract['filter'] if "filter" in extract else "*/*",
-                                                           provider['publisher'], provider['name'], actual_version)
+                                                           provider['publisher'], provider['name'], actual_version,
+                                                           content) # todo: ??
 
                                 self.add_installed (provider['publisher'], provider['name'], package['version'], 
                                                     apackage_file, self.package_url, extract['type'],

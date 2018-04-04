@@ -13,7 +13,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <InterpreterVersion />
-    <CommandLineArguments>--install ..\packages\bobc-kicad-scripts.yml</CommandLineArguments>
+    <CommandLineArguments>-v --install https://raw.githubusercontent.com/bobc/BOM_Plugin_Example/master/bobc-BOM_Plugin_Example.yml</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
