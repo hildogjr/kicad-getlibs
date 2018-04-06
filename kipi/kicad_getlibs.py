@@ -366,7 +366,7 @@ def git_clone_or_update (repo_url, target_path, target_name, git_output):
         else:
             if not args.quiet:
                 print ("Updating repo", repo_name)
-            pr = Popen(["git", "pull"], cwd=os.path.join(target_path, target_name), stdout=git_output)
+            pr = Popen(["git", "pull", "--depth=1"], cwd=os.path.join(target_path, target_name), stdout=git_output)
             pr.wait()
     else:
         if args.test:
@@ -374,7 +374,7 @@ def git_clone_or_update (repo_url, target_path, target_name, git_output):
         else:
             make_folder(target_path)
 
-            cmd = ["git", "clone", repo_url, target_name]
+            cmd = ["git", "clone", "--depth=1", repo_url, target_name]
             if not args.quiet:
                 print ("Cloning repo", repo_name)
             if not args.verbose:
