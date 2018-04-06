@@ -27,8 +27,13 @@ def read_lib_table(filename, atype):
                 break
 
             tok = tok.strip("(")
-            key, val = tok.split(None, 1)
+            tokens = tok.split(None, 1)
 
+            key = tokens[0]
+            if len(tokens)>1 :
+                val = tokens[1]
+            else:
+                val = None
             lib[key] = val
 
         libs.append(lib)
@@ -50,7 +55,11 @@ def write_lib_table(filename, atype, libs):
         fw.write("(sym_lib_table\n")
 
     for lib in libs:
-        fw.write("  (lib (name %s)(type %s)(uri %s)(options %s)(descr %s))\n" % (lib['name'], lib['type'], lib['uri'], lib['options'], lib['descr']))
+        line = "(lib (name %s)(type %s)(uri %s)(options %s)(descr %s)" % (lib['name'], lib['type'], lib['uri'], lib['options'], lib['descr'])
+        if 'disabled' in lib:
+            line += "(disabled)"
+        line += ")"
+        fw.write("  %s\n" % line)
 
     fw.write(")\n")
     fw.close()

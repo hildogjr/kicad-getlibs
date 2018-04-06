@@ -7,13 +7,13 @@
     <ProjectHome />
     <StartupFile>kicad_getlibs.py</StartupFile>
     <SearchPath />
-    <WorkingDirectory>c:\git_bobc\kicad-getlibs\KiPI</WorkingDirectory>
+    <WorkingDirectory>c:\git_bobc\kicad-getlibs</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <InterpreterVersion />
-    <CommandLineArguments>-v --install https://raw.githubusercontent.com/bobc/BOM_Plugin_Example/master/bobc-BOM_Plugin_Example.yml</CommandLineArguments>
+    <CommandLineArguments>-v --install packages\kicad-official-libraries-v5-no-3d.yml</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
