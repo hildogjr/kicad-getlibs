@@ -8,6 +8,8 @@ Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "gen_from_github", "gen_gith
 EndProject
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "make_package", "make_package\make_package.pyproj", "{12455555-817B-418A-BAC1-20BCD8A8005E}"
 EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "gen_index", "gen_index\gen_index.pyproj", "{40523AAE-91B9-4EF7-A4C6-9173875D9950}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,6 +22,8 @@ Global
 		{03DDA8D6-1109-4DEF-BA7F-4EF4B7F601BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{12455555-817B-418A-BAC1-20BCD8A8005E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{12455555-817B-418A-BAC1-20BCD8A8005E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{40523AAE-91B9-4EF7-A4C6-9173875D9950}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{40523AAE-91B9-4EF7-A4C6-9173875D9950}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
