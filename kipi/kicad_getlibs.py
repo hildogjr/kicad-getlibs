@@ -1181,6 +1181,39 @@ def find_version (provider, target_version):
     return match_package
 
 
+def output_table (headings, data):
+    sizes = []
+
+    for h in headings:
+        sizes.append (len(h))
+
+    for line in data:
+        for j in range(0,min (len(headings), len(line))):
+            sizes[j] = max (sizes[j], len(line[j]))
+#
+    for j in range(0, len(sizes)):
+        sizes[j] = sizes[j] + 2
+
+    s = ""
+    for j in range(0,len(headings)):
+        fmt = "%%-%ds" % sizes[j]
+        s += fmt % headings[j]
+    print (s)
+
+    s = ""
+    for j in range(0,len(headings)):
+        s += '-' * sizes[j]
+    print (s)
+
+
+    for line in data:
+        s = ""
+        for j in range(0, min (len(headings), len(line))):
+            fmt = "%%-%ds" % sizes[j]
+            s += fmt % line[j]
+        print (s)
+
+        
 #
 #
 #
@@ -1421,6 +1454,132 @@ class Kipi():
             print ("error: package name %s not installed" % package_name)
             return 2
 
+    def list(self, check_for_updates=True, display_table=True):
+
+        updates = []
+
+        if "installed" in self.config and self.config['installed']:
+            headings = ["Publisher", "Package name", "Content", "Installed Version (latest)"]
+            if args.verbose:
+                headings.append("Source")
+
+            #print ("%-15s %-35s %-28s %s" % ("Publisher", "Package name", "Installed Version (latest)", "Source") )
+            #print ('-' * (15+1+35+1+28+1+10))
+
+            table = []
+
+            for config_package in self.config['installed']:
+                # get from url?
+                # only if flag?
+                if config_package['url']:
+                    self.get_package_file (config_package['url'])
+
+                #
+                providers = read_package_info (config_package['package_file'])
+                if providers:
+                    for provider in providers:
+
+                        installed_version = find_version (provider, config_package['version'])
+
+                        first = True
+                        for content in installed_version['content']:
+
+                            latest_package = find_version (provider, "latest")
+
+                            line = []
+                            if first:
+                                line.append (config_package['publisher'])
+                                line.append (config_package['package'])
+                                first = False
+                            else:
+                                line.append ("")
+                                line.append ("")
+
+                            line.append (content['name'])
+            
+                            ver = ""
+                            update_available = False
+                            if config_package['version'] == "latest":
+                                if self.git_test():
+                                    if "git_repo" in config_package:
+
+                                        git_repo = os.path.join (self.paths.cache_dir, config_package['publisher'], config_package['package'], 
+                                                                   content['name'],
+                                                                   config_package['version'])
+                                        ver = "git: %s" % get_git_status (git_repo)
+                                        branch = get_git_branch_name (git_repo)
+                                        status = get_git_branch_status (git_repo, branch)
+                                        if status:
+                                            ver += " (%s)" % status
+                                            if status != "up to date":
+                                                update_available = True
+
+                                    else:
+                                        vers = "git: unknown"
+                                else:
+                                    ver = "git: unknown"
+                            else:
+                                ver = config_package['version']
+                                if latest_package and is_later_version (latest_package['version'], config_package ['version']):
+                                    ver += " (latest %s)" % latest_package['version']
+                                    update_available = True
+
+                            if update_available:
+                                if not config_package['package'] in updates:
+                                    updates.append ([config_package, latest_package, content])
+
+                            line.append (ver)
+
+                            if config_package['url']:
+                                line.append (config_package['url'])
+                            elif "file" in config_package and config_package['file']:
+                                line.append (config_package['file'])
+
+                            table.append (line)
+
+            #
+            if display_table:
+                output_table (headings, table)
+
+        else:
+            print ("no packages installed")
+
+        return 0, updates
+
+    def update (self):
+        if "installed" in self.config and self.config['installed']:
+            err_code, update_packages = self.list (check_for_updates=True, display_table=False)
+
+            # todo display all contents
+
+            table = []
+            headings = ["Publisher", "Package name", "Content", "Installed Version (latest)"]
+            for config_package, latest_package, content in update_packages:
+                #print ("%-15s %-20s %s %s (%s)" % () )
+                line = [config_package['publisher'], config_package['package'], 
+                        content['name'],
+                        "%s (%s)" % (config_package['version'], latest_package['version'] ) ]
+                table.append (line)
+
+            output_table (headings, table)
+
+            if len(update_packages) > 0:
+                ans = raw_input( "Update packages [Y] ? ")
+                if ans == "" or ans.lower().startswith("y"):
+                #
+                    for config_package, latest_package, content in update_packages:
+                        # remove current?
+                        # remove_package (package)
+                        self.package_url = config_package['url']
+                        self.remove (config_package['publisher'], config_package['package'])
+                        self.install (config_package['package_file'], latest_package['version'], "download,install")
+            else:
+                print ("No updates available")
+        else:
+            print ("No packages installed")
+
+        return 0
+
     def test(self):
         remove_bom_plugin_entry (self.paths, "fred")
         #add_bom_plugin_entry (self.paths, "fred", 'mycmd "arg1" "arg2"')
@@ -1527,50 +1686,12 @@ class Kipi():
         #self.have_git = git_check()
         
 
-        if (args.install or args.update or args.remove) and get_running_processes("kicad"):
+        if (args.install or args.update or args.remove) and get_running_processes("kicad") and not args.test:
             print ("error: cannot modify installed packages while kicad is running")
             return 2
 
         if args.update:
-            if "installed" in self.config and self.config['installed']:
-                update_packages = []
-                for package in self.config['installed']:
-                    # get from url?
-                    # only if flag?
-                    if package['url']:
-                        self.get_package_file (package['url'])
-
-                    #
-                    providers = read_package_info (package['package_file'])
-                    if providers:
-                        latest_package = find_version (providers[0], "latest")
-
-                    latest = Version (latest_package['version'])
-                    if latest.compare (Version (package['version'])):
-                        print ("%-15s %-20s %s (latest %s)" % (package['publisher'], package['package'], package['version'],
-                                                              latest_package['version'] if latest_package else "") )
-                        update_packages.append(package)
-
-                #
-                if len(update_packages) > 0:
-                    ans = raw_input( "Update packages [Y] ? ")
-                    if ans == "" or ans.lower().startswith("y"):
-                    #
-                        for package in update_packages:
-                            # remove current?
-                            # remove_package (package)
-
-                            self.package_url = package['url']
-
-                            self.remove (package['publisher'], package['package'])
-
-                            self.install (package['package_file'], latest_package['version'], "download,install")
-
-                else:
-                    print ("No updates available")
-            else:
-                print ("no packages installed")
-            err_code = 0
+            err_code = self.update ()
 
         elif args.catalog:
             # 
@@ -1587,57 +1708,7 @@ class Kipi():
             err_code = 0
 
         elif args.list:
-            if "installed" in self.config and self.config['installed']:
-                print ("%-15s %-35s %-28s %s" % ("Publisher", "Package name", "Installed Version (latest)", "Source") )
-                print ('-' * (15+1+35+1+28+1+10))
-                for package in self.config['installed']:
-                    # get from url?
-                    # only if flag?
-                    if package['url']:
-                        self.get_package_file (package['url'])
-
-                    #
-                    providers = read_package_info (package['package_file'])
-                    if providers:
-                        # TODO 
-                        latest_package = find_version (providers[0], "latest")
-
-                    s = "%-15s %-35s" % (package['publisher'], package['package']) 
-            
-                    if package['version'] == "latest":
-                        if self.git_test():
-                            if "git_repo" in package:
-                                s += " git: %s" % get_git_status (package['git_repo'])
-
-                                branch = get_git_branch_name (package['git_repo'])
-                                status = get_git_branch_status (package['git_repo'], branch)
-                                if s:
-                                    s += " (%s)" % status
-                            else:
-                                s += " git: unknown"
-                        else:
-                            s += " git: unknown"
-                    else:
-                        ver = package['version']
-                        if latest_package and is_later_version (latest_package['version'], package ['version']):
-                            ver += " (latest %s)" % latest_package['version']
-                        s += " %-28s" % ver
-
-                    if package['url']:
-                        s += " %s" % package['url']
-                    elif "file" in package and package['file']:
-                        s += " %s" % package['file']
-
-                    print (s)
-
-                    if args.verbose:
-                        if package['files']:
-                            for f in package['files']:
-                                print ("   %s" % (f))
-
-            else:
-                print ("no packages installed")
-            err_code = 0
+            err_code, updates = self.list()
 
         elif args.download or args.install:
             err_code = self.get_package_file(args.package_spec)
