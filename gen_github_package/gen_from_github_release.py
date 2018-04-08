@@ -21,7 +21,10 @@ import tempfile
 
 import yaml
 
-sys.path.append ("../KiPI")
+common = os.path.abspath(os.path.join(sys.path[0], '../kipi'))
+if not common in sys.path:
+    sys.path.append(common)
+
 from checksum import get_sha256_hash
 
 
@@ -61,6 +64,7 @@ def generate_info (git_user, git_repo, content_type):
 
                     package_version = {}
                     package_version ['version'] = str(release['tag_name'])
+                    package_version ['target'] = ["5"]
                     package_version ['content'] = []
                     versions.append (package_version)
 
