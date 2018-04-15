@@ -1,6 +1,7 @@
 kicad-official-libs-v5-with-3d:
   publisher: KiCad
   description: Official libraries for v5
+  target: [5]
 
   packages:
     - version: latest

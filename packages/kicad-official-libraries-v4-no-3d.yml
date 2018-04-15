@@ -1,17 +1,9 @@
 kicad-official-libs-v4-no-3d:
   publisher: KiCad
   description: Official libraries for v4
+  target: [4]
 
   packages:
-    - version: latest
-      content:
-        - name: kicad-footprints
-          type: footprint
-          url: https://github.com/KiCad/kicad-footprints.git
-        - name: kicad-symbols
-          type: symbol
-          url: https://github.com/KiCad/kicad-symbols.git
-          filter: "*.*"
     - version: 4.0.7
       content:
         - name: kicad-footprints

@@ -1,0 +1,23 @@
+kicad-official-3dmodels-v4:
+  publisher: KiCad
+  description: Official 3D models for v4
+  target: [4]
+
+  packages:
+    - version: 4.0.7
+      content:
+        - name: kicad-packages3d
+          type: 3dmodel
+          url: http://downloads.kicad-pcb.org/libraries/kicad-library-4.0.7.zip
+          checksum: "SHA-256:11d9a9f263059eea151edae8becb042e5e630dfe49bfda5c76af872fd93fcc2a"
+          size: 475257538
+          filter: "kicad-library-4.0.7/modules/packages3d/..."
+    - version: 4.0.6
+      content:
+        - name: kicad-packages3d
+          type: 3dmodel
+          url: http://downloads.kicad-pcb.org/libraries/kicad-library-4.0.6.zip
+          checksum: "SHA-256:264877516c80aa2428afa4867e01c330d8344df73266be0f2d551d3c77314309"
+          size: 172942005
+          filter: "kicad-library-4.0.6/modules/packages3d/..."
+

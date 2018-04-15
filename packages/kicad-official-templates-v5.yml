@@ -1,6 +1,7 @@
 kicad-official-templates:
   publisher: KiCad
   description: Official templates for v5
+  target: [5]
 
   packages:
     - version: latest

@@ -1,7 +1,7 @@
 bobc-kicad-scripts:
   publisher: bobc
   description: Footprint wizards
-
+  target: [4]
   packages:
     - version: latest
       content:
