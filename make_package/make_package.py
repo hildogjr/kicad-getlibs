@@ -45,8 +45,6 @@ def make_zip (name, version, files):
         print ("No files found")
     else:
         print ("%d files found" % len(files))
-
-
         zip_name = name + "-" + version + ".zip"
         print ("Creating %s" % zip_name)
         zipf = zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED)
@@ -87,6 +85,7 @@ def make_version (zip_basename, version, zip_url, content_name, content_type, co
 
     package_version = {}
     package_version ['version'] = version
+    package_version ['target'] = ["5"]
     package_version ['content'] = [content1]
 
     return package_version

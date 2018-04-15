@@ -79,7 +79,7 @@ def generate_info (git_user, git_repo, content_type):
                         #content ['checksum'] = "SHA-256:" + zip_hash
                         content ['size'] = asset['size']
                         content ['type'] = content_type
-                        content ['filter'] = "*/*"
+                        #content ['filter'] = "*.*"
 
                         #local_file = tempfile.mkstemp()
                         local_file = get_url_name (content ['url'])

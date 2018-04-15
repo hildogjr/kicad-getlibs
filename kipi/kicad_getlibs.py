@@ -15,6 +15,7 @@ Derived from https://github.com/hairymnstr/kicad-getlibs.
 from __future__ import print_function
 
 import argparse
+import copy
 import glob
 #import json
 import os
@@ -22,6 +23,7 @@ from subprocess import Popen
 import subprocess
 import sys
 import shutil
+import time
 import urllib
 #import urllib2
 import zipfile
@@ -52,7 +54,15 @@ else:
 
     import sexpdata
 
+#
+#
+#
+valid_content_types = ["footprint", "symbol", "3dmodel", "template", "script", "bom-plugin"]
 
+
+#
+#
+#
 class Paths():
     def __init__(self):
         # KiCad paths
@@ -98,11 +108,12 @@ class PackageInfo():
         self.name = ""
         self.publisher = ""
         self.description = ""
+        self.kicad_targets = []  # kicad versions supported
         self.versions = []
 
 class PackageSet():
     def __init__(self):
-        self.packages = []
+        self.packages = [] # of PackageInfo
 
 class Path ():
 
@@ -156,7 +167,7 @@ class Path ():
 #
 # Platform dependent functions
 #
-def get_config_path (appname):
+def get_app_config_path (appname):
 
     if sys.platform == 'darwin':
         from AppKit import NSSearchPathForDirectoriesInDomains
@@ -298,7 +309,19 @@ def unzip_zip(thedir, name):
     except zipfile.error, e:
         print ("error: Bad zipfile: %s" % (e))
         return False
-    z.extractall(thedir)
+
+    #z.extractall(thedir)
+    for f in z.infolist():
+        name, date_time = f.filename, f.date_time
+        name = os.path.join(thedir, name)
+        if name.endswith('\\') or name.endswith('/'):
+            make_folder (name)
+        else:
+            with open(name, 'wb') as outFile:
+                outFile.write(z.open(f).read())
+            date_time = time.mktime(date_time + (0, 0, -1))
+            os.utime(name, (date_time, date_time))
+
     z.close()
     return True
 
@@ -366,7 +389,8 @@ def git_clone_or_update (repo_url, target_path, target_name, git_output):
         else:
             if not args.quiet:
                 print ("Updating repo", repo_name)
-            pr = Popen(["git", "pull", "--depth=1"], cwd=os.path.join(target_path, target_name), stdout=git_output)
+            #pr = Popen(["git", "pull", "--depth=1"], cwd=os.path.join(target_path, target_name), stdout=git_output)
+            pr = Popen(["git", "pull"], cwd=os.path.join(target_path, target_name), stdout=git_output)
             pr.wait()
     else:
         if args.test:
@@ -472,7 +496,7 @@ def remove_table_entries (kicad_config_dir, table_type, publisher, package):
     if changes:
         save_table (kicad_config_dir, table_name, table_type, new_libs)
 
-def update_global_table(kicad_config_dir, table_type, update_libs, package_path, publisher, package, version):
+def update_global_table(kicad_config_dir, table_type, update_libs, publisher, package, version):
 
     changes = False
 
@@ -489,10 +513,14 @@ def update_global_table(kicad_config_dir, table_type, update_libs, package_path,
 
         new_libs = []
         for lib in libs:
+            # todo: 
+            # remove by publisher
             if lib['options'].find("publisher=%s" % publisher) > -1:
                 if args.verbose:
                     print ("remove: " + lib['name'])
                 changes = True
+
+            # remove if KiCad??
             elif lib['uri'].find("github.com/KiCad") > -1 or lib['uri'].find("KIGITHUB") > -1 :
                 # todo: KIGITHUB may not be KiCad
                 # remove github/KiCad entries
@@ -500,6 +528,7 @@ def update_global_table(kicad_config_dir, table_type, update_libs, package_path,
                     print ("remove: " + lib['name'])
                 changes = True
 
+            # remove if going to replace
             elif update_libs and update_libs.count (lib['name']+ext) > 0 :
                 if args.verbose:
                     print ("remove: " + lib['name'])
@@ -523,11 +552,12 @@ def update_global_table(kicad_config_dir, table_type, update_libs, package_path,
                 lib = {}
                 #lib['name'] = repo.rsplit('/', 1)[1].split(".")[0]
                 lib['name'] = get_filename_without_extension(lib_name)
+                # todo: other types
                 if table_type == "fp":
                     lib['type'] = u'KiCad'
                 else:
                     lib['type'] = u'Legacy'
-                lib['uri'] = os.path.abspath(os.path.join(package_path, lib['name'] + ext))
+                lib['uri'] = lib_name
                 #lib['uri'] = "${KISYSMOD}/" + lib['name'] + ext
                 lib['options'] = u'publisher=%s|package=%s|version=%s' % (publisher, package, version)
                 lib['descr'] = u'""'
@@ -618,9 +648,19 @@ def recursive_copy_files(source_path, destination_path, overwrite=False):
 
 
 
-def copy_files (files, source_path, dest_path):
+def copy_files (source_path, files, dest_path, existing_files):
 
     copied_files = []
+
+    #
+    if existing_files:
+        for filename in existing_files:
+            rel_path = os.path.relpath(filename, dest_path)
+
+            if not os.path.join (source_path, rel_path) in files:
+                if os.path.isfile (filename):
+                    delete_file (filename)
+    #
 
     count = 0
     interval = len(files) / 10 + 1
@@ -639,30 +679,122 @@ def copy_files (files, source_path, dest_path):
         rel_path = os.path.relpath(filename, source_path)
 
         dest_file = os.path.join (dest_path, rel_path)
-            
-        adir = os.path.dirname (dest_file)
-        if not os.path.isdir (adir):
+        
+        # create new folder if necessary
+        dest_dir = os.path.dirname (dest_file)
+        if not os.path.isdir (dest_dir):
             if args.test:
-                print ("Would create %s " % adir)
+                print ("Would create %s " % dest_dir)
             else:
-                make_folder(adir)
-                copied_files.append (adir)
+                make_folder(dest_dir)
+                copied_files.append (dest_dir)
 
-        if args.test:
-            if count < 10:
-                print ("Would create %s" % (dest_file))
-            elif count == 10 and len(files) > 10:
-                print ("Would copy %d others (omitted)" % (len(files)-10))
-            
+        copy_file = False
+        if os.path.exists (dest_file):
+            # is it different?
+            if os.path.getsize(filename) != os.path.getsize(dest_file) or os.path.getmtime(filename) != os.path.getmtime(dest_file):
+                copy_file = True
         else:
-            if args.verbose:
-                print ("copying %s to %s" % (filename, dest_file))
-            shutil.copy2 (filename, dest_file)
-            copied_files.append (dest_file)
+            # new file
+            copy_file = True
 
-            count += 1 
-            if not args.verbose and (count % interval == 0):
-                print ("%d%%.." % (count*100/len(files)), end='')
+        if copy_file:
+            # copy the file
+            if args.test:
+                if count < 10:
+                    print ("Would create %s" % (dest_file))
+                elif count == 10 and len(files) > 10:
+                    print ("Would copy %d others (omitted)" % (len(files)-10))
+            
+            else:
+                if args.verbose:
+                    print ("copying %s to %s" % (filename, dest_file))
+                shutil.copy2 (filename, dest_file)
+                copied_files.append (dest_file)
+
+                count += 1 
+                if not args.verbose and (count % interval == 0):
+                    print ("%d%%.." % (count*100/len(files)), end='')
+
+    if not args.verbose:
+        print ("Done.")
+
+    return copied_files
+
+def copy_files2 (source_path, files, dest_path, dest_names, existing_files):
+
+    copied_files = []
+
+    #
+    if existing_files:
+        for filename in existing_files:
+            rel_path = os.path.relpath(filename, dest_path)
+
+            if not os.path.join (source_path, rel_path) in files:
+                if os.path.isfile (filename):
+                    delete_file (filename)
+    #
+
+    count = 0
+    interval = len(files) / 10 + 1
+    if not args.verbose:
+        print ("Copying files..", end='')
+
+    # todo: root folder?
+    if not os.path.isdir (dest_path):
+        if args.test:
+            print ("Would create %s " % dest_path)
+        else:
+            make_folder(dest_path)
+            copied_files.append (dest_path)
+
+    j = 0
+    for filename in files:
+        if dest_names:
+            rel_path = dest_names[j]
+        else:
+            rel_path = os.path.relpath(filename, source_path)
+        j += 1
+
+        dest_file = os.path.join (dest_path, rel_path)
+        
+        # create new folder if necessary
+        dest_dir = os.path.dirname (dest_file)
+        if not os.path.isdir (dest_dir):
+            if args.test:
+                print ("Would create %s " % dest_dir)
+            else:
+                make_folder(dest_dir)
+                copied_files.append (dest_dir)
+
+        copy_file = False
+        if os.path.exists (dest_file):
+            # is it different?
+            if os.path.getsize(filename) != os.path.getsize(dest_file) or os.path.getmtime(filename) != os.path.getmtime(dest_file):
+                copy_file = True
+        else:
+            # new file
+            copy_file = True
+
+        if copy_file:
+            # copy the file
+            if args.test:
+                if count < 10:
+                    print ("Would create %s" % (dest_file))
+                elif count == 10 and len(files) > 10:
+                    print ("Would copy %d others (omitted)" % (len(files)-10))
+            
+            else:
+                if args.verbose:
+                    print ("copying %s to %s" % (filename, dest_file))
+                shutil.copy2 (filename, dest_file)
+
+                count += 1 
+                if not args.verbose and (count % interval == 0):
+                    print ("%d%%.." % (count*100/len(files)), end='')
+
+        if not args.test:
+            copied_files.append (dest_file)
 
     if not args.verbose:
         print ("Done.")
@@ -706,6 +838,17 @@ def copy_folders (folders, source_path, dest_path):
 
     return copied_files
 
+def delete_file (afile):
+    if args.test:
+        print ("would delete file %s" % (afile))
+    else:
+        if args.verbose:
+            print ("deleting %s" % (afile))
+        try:
+            os.remove (afile)
+        except OSError, e:
+            print ("error: can't delete file %s: %s" % (afile, e.strerror))
+
 def delete_files (files):
     if files is None:
         return
@@ -714,16 +857,7 @@ def delete_files (files):
         if os.path.isdir (afile):
             pass
         else:
-            if args.test:
-                print ("would delete file %s" % (afile))
-            else:
-                if args.verbose:
-                    print ("deleting %s" % (afile))
-
-                try:
-                    os.remove (afile)
-                except OSError, e:
-                    print ("error: can't delete file %s: %s" % (afile, e.strerror))
+            delete_file (afile)
 
     files.reverse()
     for item in files:
@@ -746,17 +880,22 @@ def delete_files (files):
 
 
 
-def read_eeschema_config (path):
+def read_config_file (path):
     with open(path) as f:
         config = f.read().split('\n')
 
     return config
 
-def write_eeschema_config (path, config):
+def write_config_file (path, config):
     with open(path, "w") as f:
         f.write('\n'.join(config))
 
-def update_config (config, key, value):
+def get_config_item (config, key):
+    for p in config:
+        if before(p,'=').strip() == key:
+            return after(p, '=')
+
+def update_config_file (config, key, value):
     new_config = []
     for p in config:
         if before(p,'=') == key:
@@ -793,7 +932,7 @@ def escape (s):
 
 def remove_bom_plugin_entry (paths, name):
     # get list of current plugins from eeschema config
-    config = read_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"))
+    config = read_config_file (os.path.join(paths.kicad_config_dir, "eeschema"))
     bom_plugins_raw = [p for p in config if p.startswith ("bom_plugins")]
 
     new_list = []
@@ -821,14 +960,14 @@ def remove_bom_plugin_entry (paths, name):
     if changes and not args.test:
         s = sexpdata.dumps (new_list)
         # save into config
-        config = update_config (config, "bom_plugins", escape(s))
-        write_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"), config)
+        config = update_config_file (config, "bom_plugins", escape(s))
+        write_config_file (os.path.join(paths.kicad_config_dir, "eeschema"), config)
 
 # xsltproc -o "%O.csv" "C:\Program Files\KiCad\bin\scripting\plugins\bom_cvs.xsl" "%I"
 
 def add_bom_plugin_entry (paths, name, cmd):
     # get from eeschema config
-    config = read_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"))
+    config = read_config_file (os.path.join(paths.kicad_config_dir, "eeschema"))
     bom_plugins_raw = [p for p in config if p.startswith ("bom_plugins")]
 
     new_list = []
@@ -853,8 +992,8 @@ def add_bom_plugin_entry (paths, name, cmd):
         s = sexpdata.dumps (new_list)
 
         # save into config
-        config = update_config (config, "bom_plugins", escape(s))
-        write_eeschema_config (os.path.join(paths.kicad_config_dir, "eeschema"), config)
+        config = update_config_file (config, "bom_plugins", escape(s))
+        write_config_file (os.path.join(paths.kicad_config_dir, "eeschema"), config)
 
 """
 footprint   (.pretty)
@@ -909,19 +1048,25 @@ def is_writable (folder):
 
 
 def get_libs (target_path, file_spec, afilter, find_dirs):
-    libs = []
+    source_names = []
+    dest_names = []
 
     if afilter == "*/*":
         if find_dirs:
             for root, dirnames, filenames in os.walk(target_path):
                 for dirname in dirnames:
                     if dirname.endswith (file_spec):
-                        libs.append (os.path.join (root, dirname))
+                        source_name = os.path.join (root, dirname)
+                        source_names.append (source_name)
+                        rel_path = os.path.relpath(root, target_path)
+                        dest_names.append (os.path.join (rel_path, dirname))
         else:
             for root, dirnames, filenames in os.walk(target_path):
                 for filename in filenames:
                     if file_spec == '*.*' or filename.endswith (file_spec):
-                        libs.append (os.path.join(root,filename))
+                        source_names.append (os.path.join(root,filename))
+                        rel_path = os.path.relpath(root, target_path)
+                        dest_names.append (os.path.join(rel_path, filename))
 
     else:
         if isinstance (afilter, basestring):
@@ -930,19 +1075,39 @@ def get_libs (target_path, file_spec, afilter, find_dirs):
         for f in afilter:
             f = f.strip()
 
-            #p = Path(f)
+            p = Path(f)
             #print (f + " => " + str(p))
+            #path = target_path + os.sep + f
 
-            path = target_path + os.sep + f
+            path = p.get_path (target_path)
+
             if (os.path.isdir(path)):
                 path = os.path.join (path, "*.*")
 
-            for filename in glob.glob(path):
-                if filename.endswith (file_spec):
-                    libs.append (filename)
-    return libs
+            if p.recurse:
+                for root, dirnames, filenames in os.walk(p.get_path (target_path)):
+                    for filename in filenames:
+                        if file_spec == '*.*' or filename.endswith (file_spec):
+                            source_names.append (os.path.join(root,filename))
 
-def uninstall_libraries (paths, atype, publisher, package_name):
+                            rel_path = os.path.relpath(root, p.get_path (target_path))
+                            dest_names.append (os.path.join(rel_path, filename))
+
+            else:
+                for filename in glob.glob(path):
+                    if filename.endswith (file_spec):
+                        source_names.append (filename)
+
+                        rel_path = p.get_path (target_path)
+                        dest_names.append (os.path.join(rel_path, filename))
+
+    return source_names, dest_names
+
+def uninstall_content (paths, publisher, package_name, content=None):
+
+    atype = None
+    if content and 'type' in content:
+        atype = content['type']
 
     if atype is None or "footprint" in atype:
         remove_table_entries (paths.kicad_config_dir, "fp", publisher, package_name)
@@ -954,39 +1119,42 @@ def uninstall_libraries (paths, atype, publisher, package_name):
     if atype is not None and "bom-plugin" in atype:
         remove_bom_plugin_entry (paths, package_name)
 
-def install_libraries (paths, target_path, atype, afilter, publisher, package_name, target_version, content):
+def install_content (paths, target_path, atype, afilter, publisher, package_name, target_version, content, existing_content=None):
 
     files = []
+    existing_files = existing_content['files'] if existing_content and 'files' in existing_content else None
 
     if "footprint" in atype:
         # kicad_mod, other supported types
-        libs = get_libs (target_path, ".pretty", afilter, True)
+        libs, dest_names = get_libs (target_path, ".pretty", afilter, True)
 
         if len(libs) > 0:
-            print ("footprint libs: ", len(libs))
-
-            update_global_table(paths.kicad_config_dir, "fp", libs, target_path, publisher, package_name, target_version)
+            print ("Installing footprint libraries: ", len(libs))
+            update_global_table(paths.kicad_config_dir, "fp", libs, publisher, package_name, target_version)
         else:
             print ("No footprint libraries found in %s" % target_path)
 
     if "symbol" in atype:
-        libs = get_libs (target_path, ".lib", afilter, False)
+        libs, dest_names = get_libs (target_path, ".lib", afilter, False)
         # future: .sweet
 
         if len(libs) > 0:
-            print ("Symbol libs: ", len(libs))
-            update_global_table(paths.kicad_config_dir, "sym", libs, target_path, publisher, package_name, target_version)
+            print ("Installing symbol libraries: ", len(libs))
+            update_global_table(paths.kicad_config_dir, "sym", libs,  publisher, package_name, target_version)
         else:
             print ("No symbol libraries found in %s" % target_path)
 
     if "3dmodel" in atype:
-        libs = get_libs (target_path, ".wrl", afilter, False)
-        libs.extend (get_libs (target_path, ".step", afilter, False))
+        libs, dest_names = get_libs (target_path, ".wrl", afilter, False)
+
+        result = get_libs (target_path, ".step", afilter, False)
+        libs.extend (result[0])
+        dest_names.extend(result[1])
        
         # copy to ...
 
         if len(libs) > 0:
-            print ("3D model files: ", len(libs))
+            print ("Installing 3D model files: ", len(libs))
             # 
             # make_folder (ki_packages3d_dir)
             ok = False
@@ -1002,7 +1170,7 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
                     print ("error: can't create %s" % paths.ki_packages3d_dir)
 
             if ok:
-                files = copy_files(libs, target_path, paths.ki_packages3d_dir)
+                files = copy_files2(target_path, libs, paths.ki_packages3d_dir, dest_names, existing_files)
         else:
             print ("No 3D Models found in %s" % target_path)
 
@@ -1011,7 +1179,8 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
         # could also check for 'meta' folder
         # also worksheet files?
         # copy to portable templates?
-        libs = get_libs (target_path, ".pro", afilter, False)
+        libs, dest_names = get_libs (target_path, ".pro", afilter, False)
+        
         template_folders = []
         for lib in libs:
             path = get_path (lib)
@@ -1022,7 +1191,7 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
         # copy to user templates
 
         if len(template_folders) > 0:
-            print ("Templates: ", len(template_folders))
+            print ("Installing templates: ", len(template_folders))
             make_folder (paths.ki_user_templates_dir)
             files = copy_folders (template_folders, target_path, paths.ki_user_templates_dir)
         else:
@@ -1032,10 +1201,10 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
         # check for simple vs complex scripts?
         # non-python scripts?
 
-        scripts = get_libs (target_path, ".py", afilter, False)
+        scripts, dest_names = get_libs (target_path, ".py", afilter, False)
 
         if len(scripts) > 0:
-            print ("Scripts : ", len(scripts))
+            print ("Installing script files : ", len(scripts))
 
             if isinstance (afilter, basestring) and afilter != "*/*":
                 path = get_path (target_path + os.sep + afilter)
@@ -1043,19 +1212,19 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
                 path = target_path
 
             make_folder (paths.ki_user_scripts_dir)
-            files = copy_files (scripts, path, paths.ki_user_scripts_dir)
+            files = copy_files (path, scripts, paths.ki_user_scripts_dir, existing_files)
         else:
             print ("No scripts found in %s" % target_path)
 
     if "bom-plugin" in atype:
-        scripts = get_libs (target_path, "*.*", afilter, False)
+        scripts, dest_names = get_libs (target_path, "*.*", afilter, False)
         
         scripts = [p for p in scripts if not p.endswith(".zip")]
 
         # remove_bom_plugin_entry () ?
 
         if len(scripts) > 0:
-            print ("BOM Plugins : ", len(scripts))
+            print ("Installing BOM Plugin files : ", len(scripts))
 
             if isinstance (afilter, basestring) and afilter != "*/*":
                 path = get_path (target_path + os.sep + afilter)
@@ -1063,7 +1232,7 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
                 path = target_path
 
             make_folder (paths.ki_user_scripts_dir)
-            files = copy_files (scripts, path, paths.ki_user_scripts_dir)
+            files = copy_files (path, scripts, paths.ki_user_scripts_dir, existing_files)
 
             cmd = content['cmd']
             if '${BOM_SCRIPT}' in cmd:
@@ -1072,7 +1241,7 @@ def install_libraries (paths, target_path, atype, afilter, publisher, package_na
             add_bom_plugin_entry (paths, content['name'], cmd)
 
         else:
-            print ("No scripts found in %s" % target_path)
+            print ("No BOM Plugin files found in %s" % target_path)
 
 
     return files
@@ -1116,11 +1285,11 @@ def read_package_info (filepath):
             print(exc)
             return None
 
-def write_config (filepath, data):
+def write_yml_config (filepath, data):
     with open(filepath, 'w') as outfile:
         yaml.dump(data, outfile, default_flow_style=False)
 
-def read_config (filepath):
+def read_yml_config (filepath):
     if os.path.exists (filepath):
         with open(filepath, 'r') as f:
             try:
@@ -1235,39 +1404,85 @@ class Kipi():
         self.git_message = False
         self.git_checked = False
 
-    def remove_installed (self, publisher, package_name):
+    def remove_installed (self, publisher, package_name, content=None):
+
+        files_to_remove = []
 
         if "installed" in self.config:
             installed = self.config['installed']
             new_list = []
             for p in installed:
                 if p['publisher']==publisher and p['package']==package_name:
-                    delete_files (p['files'])
+
+                    for c in p['content']:
+                        if content is None or c['name'] == content['name']:
+                            if 'files' in c:
+                                #delete_files (p['files'])
+                                files_to_remove.extend (c['files'])
+                    #
+                    if content:
+                        p_new = copy.deepcopy(p)
+                        p_new['content'] = [x for x in p_new['content'] if x['name'] != content['name']]
+                        if p_new['content']:
+                            new_list.append (p_new)
                 else:
                     new_list.append (p)
 
             self.config['installed'] = new_list
 
+        return files_to_remove
 
-    def add_installed (self, publisher, package_name, target_version, apackage_file, apackage_url, atypes, files, git_path):
+    # add or update
+    def add_installed (self, publisher, package_name, 
+                       apackage_file, apackage_url, 
+                       package_to_install, content_to_install, files_to_install):
         installed = None
         if "installed" in self.config:
             installed = self.config['installed']
 
+        new_package = {}
         if installed is None:
             installed = []
+        else:
+            existing = [p for p in installed if p['publisher']==publisher and p['package']==package_name]
+            if existing:
+                new_package = existing[0]
 
-        #todo: content types
-        package = {}
-        package['publisher'] = publisher
-        package['package'] = package_name
-        package['version'] = target_version
-        package['package_file'] = apackage_file
-        package['url'] = apackage_url
-        package['type'] = atypes
-        package['files'] = files
-        package['git_repo'] = git_path
+        #todo: content types ?
 
+        new_package['publisher'] = publisher
+        new_package['package'] = package_name
+        new_package['version'] = package_to_install['version']
+        new_package['package_file'] = apackage_file
+        new_package['url'] = apackage_url
+
+        # remove existing content if any
+        if 'content' in new_package:
+            contents = [x for x in new_package['content'] if x['name'] != content_to_install['name']]
+        else:
+            contents = []
+
+        for content in package_to_install['content']:
+
+            if content['name'] == content_to_install['name']:
+                url = content['url']
+                git_path = None
+                if url.endswith(".git"):
+                    if self.git_test():
+                        git_path = os.path.join (self.paths.cache_dir, publisher, package_name, content['name'])
+                        git_path = os.path.join (git_path, package_to_install['version'])
+
+                installed_content = {}
+                installed_content ['name'] = content['name'] 
+                installed_content ['type'] = content['type'] 
+                installed_content ['files'] = files_to_install
+                if git_path:
+                    installed_content ['git_repo'] = git_path
+                contents.append (installed_content)
+
+        new_package['content'] = contents
+
+        #
         new_list = []
         for p in installed:
             if p['publisher']==publisher and p['package']==package_name:
@@ -1275,7 +1490,8 @@ class Kipi():
             else:
                 new_list.append (p)
 
-        new_list.append (package)
+        new_list.append (new_package)
+
         self.config['installed'] = new_list
 
     def get_package_file(self, _package_file):
@@ -1315,7 +1531,7 @@ class Kipi():
 
         return 0
 
-    def install (self, apackage_file, target_version, actions):
+    def install_package (self, apackage_file, target_version, actions, required_content = None):
     
         providers = read_package_info (apackage_file)
         if providers is None:
@@ -1327,9 +1543,8 @@ class Kipi():
         changes = True
         self.config ['default_package'] = apackage_file
 
-    #    if "download" in actions:
         for provider in providers:
-            print ("Provider: %s, description: %s" % ( provider['name'], provider['description']))
+            print ("Installing package: %s, description: %s" % ( provider['name'], provider['description']))
     #
             # find matching version
             match_package = find_version (provider, target_version)
@@ -1339,95 +1554,75 @@ class Kipi():
                 break
             #
             actual_version = match_package['version']
-
             package = match_package
-            #for package in provider['packages']:
-            #if package['version'] == target_version:
-            # print ("   package: ver: %s" % ( package['version']))
-                 
+            
+            files = []     
             for content in package['content']:
-                #print "      content: type: %s url: %s filters: %s" % ( 
-                #    content['type'], content['url'],
-                #    content['filter'] if "filter" in content else "*/*"
-                #    )
 
-                target_path = os.path.join (self.paths.cache_dir, provider['publisher'], provider['name'], content['name'], actual_version)
+                if required_content is None or required_content['name'] == content['name']:
+                    target_path = os.path.join (self.paths.cache_dir, provider['publisher'], provider['name'], content['name'], actual_version)
 
-                print ("Data source: %s" % (content['url']))
+                    if args.verbose:
+                        print ("Data source: %s" % (content['url']))
 
-                if "download" in actions:
-                    url = content['url']
-                    if url.endswith(".git"):
-                        if self.git_test():
-                            git_path = os.path.join (self.paths.cache_dir, provider['publisher'], provider['name'], content['name'])
-                            git_clone_or_update (url, git_path, actual_version, self.git_output)
-
-                            git_path = os.path.join (git_path, actual_version)
-                            ok = True
+                    if "download" in actions:
+                        url = content['url']
+                        if url.endswith(".git"):
+                            if self.git_test():
+                                git_path = os.path.join (self.paths.cache_dir, provider['publisher'], provider['name'], content['name'])
+                                git_clone_or_update (url, git_path, actual_version, self.git_output)
+                                git_path = os.path.join (git_path, actual_version)
+                                ok = True
+                            else:
+                                print ("Skipping %s" % content['name'])
+                                ok = False
                         else:
-                            print ("Skipping %s" % content['name'])
-                            ok = False
-                    else:
-                        # get zip
-                        git_path = None
-                        if "checksum" in content:
-                            ok = get_zip (url, target_path, content['checksum'])
-                        else:
-                            print ("Error: missing checksum for %s" % content['name'])
-                            ok = False
+                            # get zip
+                            git_path = None
+                            if "checksum" in content:
+                                ok = get_zip (url, target_path, content['checksum'])
+                            else:
+                                print ("Error: missing checksum for %s" % content['name'])
+                                ok = False
 
-                    if ok and "install" in actions:
-                        if "type" in content:
-                            files = install_libraries (self.paths, target_path, 
-                                                       content['type'], content['filter'] if "filter" in content else "*/*",
-                                                       provider['publisher'], provider['name'], actual_version,
-                                                       content)
-
-                            self.add_installed (provider['publisher'], provider['name'], package['version'], 
-                                                apackage_file, self.package_url, content['type'],
-                                                files, git_path)
-                            changes = True
-
-                        else:
-                            for extract in content['extract']:
-                                files = install_libraries (self.paths, target_path,
-                                                           extract['type'], extract['filter'] if "filter" in extract else "*/*",
+                        if ok and "install" in actions:
+                            if "type" in content:
+                                files = install_content (self.paths, target_path, 
+                                                           content['type'], content['filter'] if "filter" in content else "*/*",
                                                            provider['publisher'], provider['name'], actual_version,
-                                                           content) # todo: ??
+                                                           content, required_content)
 
-                                self.add_installed (provider['publisher'], provider['name'], package['version'], 
-                                                    apackage_file, self.package_url, extract['type'],
-                                                    files, git_path)
+                                self.add_installed (provider['publisher'], provider['name'], 
+                                                    apackage_file, 
+                                                    self.package_url, 
+                                                    package,  # package to install
+                                                    content,  # content to install
+                                                    files)
                                 changes = True
+                            else:
+                                files = []
+                                for extract in content['extract']:
+                                    files.extend( install_content (self.paths, target_path,
+                                                               extract['type'], extract['filter'] if "filter" in extract else "*/*",
+                                                               provider['publisher'], provider['name'], actual_version,
+                                                               content, required_content) )
+                                # todo ?
+                                self.add_installed (provider['publisher'], provider['name'], 
+                                                    apackage_file, self.package_url, 
+                                                    package, content,
+                                                    files)
+                                changes = True
+            # for content
+            #
 
-                #elif "remove" in actions:
-                #    if "type" in content:
-                #        uninstall_libraries (self.paths, target_path, content['type'],
-                #                                content['filter'] if "filter" in content else "*/*",
-                #                                provider['publisher'], provider['name'], actual_version)
-
-                #        self.remove_installed (provider['publisher'], provider['name'], actual_version)
-                #        changes = True
-
-                #    else:
-                #        for extract in content['extract']:
-                #            uninstall_libraries (self.paths, target_path,
-                #                                extract['type'],
-                #                                extract['filter'] if "filter" in extract else "*/*",
-                #                                provider['publisher'], provider['name'], actual_version)
-
-                #            self.remove_installed (provider['publisher'], provider['name'], actual_version)
-                #            changes = True
-
-            print ("")
-        # for
+        # for provider
 
         if changes and not args.test:
-            write_config (self.paths.kipi_config_filename, self.config)
+            write_yml_config (self.paths.kipi_config_filename, self.config)
 
         return 0
 
-    def remove (self, publisher, package_name):
+    def remove_package (self, publisher, package_name, content = None):
         temp = [p for p in self.config['installed'] if p['package'] == package_name]
 
         if publisher:
@@ -1435,24 +1630,34 @@ class Kipi():
         else:
             packages = temp
 
+        err_code = 0
+        files_to_remove = []
+
         changes = False
         if len(packages) == 1:
             # todo: get type?
-            uninstall_libraries (self.paths, None, packages[0]['publisher'], package_name)
+            if content is None:
+                # remove all
+                print ("Removing package %s" % package_name)
+                uninstall_content (self.paths, packages[0]['publisher'], package_name)
+                files_to_remove = self.remove_installed (packages[0]['publisher'], package_name)
+            else:
+                print ("Removing package content %s" % content['name'])
+                uninstall_content (self.paths, packages[0]['publisher'], package_name, content)
+                files_to_remove = self.remove_installed (packages[0]['publisher'], package_name, content)
 
-            self.remove_installed (packages[0]['publisher'], package_name)
             changes = True
     
             if changes and not args.test:
-                write_config (self.paths.kipi_config_filename, self.config)
+                write_yml_config (self.paths.kipi_config_filename, self.config)
            
-            return 0    
+            return err_code, files_to_remove
         elif len(packages) > 1:
             print ("error: package name %s is ambiguous" % package_name)
-            return 2
+            return 2, files_to_remove
         else:
             print ("error: package name %s not installed" % package_name)
-            return 2
+            return 2, files_to_remove
 
     def list(self, check_for_updates=True, display_table=True):
 
@@ -1462,9 +1667,6 @@ class Kipi():
             headings = ["Publisher", "Package name", "Content", "Installed Version (latest)"]
             if args.verbose:
                 headings.append("Source")
-
-            #print ("%-15s %-35s %-28s %s" % ("Publisher", "Package name", "Installed Version (latest)", "Source") )
-            #print ('-' * (15+1+35+1+28+1+10))
 
             table = []
 
@@ -1482,7 +1684,8 @@ class Kipi():
                         installed_version = find_version (provider, config_package['version'])
 
                         first = True
-                        for content in installed_version['content']:
+                        #for content in installed_version['content']:
+                        for content in config_package['content']:
 
                             latest_package = find_version (provider, "latest")
 
@@ -1501,7 +1704,7 @@ class Kipi():
                             update_available = False
                             if config_package['version'] == "latest":
                                 if self.git_test():
-                                    if "git_repo" in config_package:
+                                    if "git_repo" in content:
 
                                         git_repo = os.path.join (self.paths.cache_dir, config_package['publisher'], config_package['package'], 
                                                                    content['name'],
@@ -1521,7 +1724,7 @@ class Kipi():
                             else:
                                 ver = config_package['version']
                                 if latest_package and is_later_version (latest_package['version'], config_package ['version']):
-                                    ver += " (latest %s)" % latest_package['version']
+                                    ver += " (%s)" % latest_package['version']
                                     update_available = True
 
                             if update_available:
@@ -1546,24 +1749,57 @@ class Kipi():
 
         return 0, updates
 
-    def update (self):
+    # select from list of updatable_packages
+    def get_matching (self, packages, publisher, package_name):
+        result = []
+        if publisher is None and package_name is None:
+            result = packages
+            return result
+
+        for item in packages:
+            config_package = item[0]
+            select = True
+            if publisher and config_package['publisher'] != publisher:
+                select = False
+
+            if select and package_name and 'name' in config_package and config_package['name'] != package_name:
+                select = False
+
+            if select and package_name and 'package' in config_package and config_package['package'] != package_name:
+                select = False
+
+            if select:
+                result.append (item)
+
+        return result
+
+
+    def update_package (self, publisher, package_name):
         if "installed" in self.config and self.config['installed']:
-            err_code, update_packages = self.list (check_for_updates=True, display_table=False)
+            err_code, updatable_packages = self.list (check_for_updates=True, display_table=False)
 
-            # todo display all contents
+            #
+            temp = [p for p in self.config['installed'] if p['package'] == package_name]
+            if publisher:
+                packages = [p for p in temp if p['publisher'] == publisher]
+            else:
+                packages = temp
 
-            table = []
-            headings = ["Publisher", "Package name", "Content", "Installed Version (latest)"]
-            for config_package, latest_package, content in update_packages:
-                #print ("%-15s %-20s %s %s (%s)" % () )
-                line = [config_package['publisher'], config_package['package'], 
-                        content['name'],
-                        "%s (%s)" % (config_package['version'], latest_package['version'] ) ]
-                table.append (line)
-
-            output_table (headings, table)
+            update_packages = self.get_matching (updatable_packages, publisher, package_name)
 
             if len(update_packages) > 0:
+
+                table = []
+                headings = ["Publisher", "Package name", "Content", "Installed Version (latest)"]
+                for config_package, latest_package, content in update_packages:
+                    #print ("%-15s %-20s %s %s (%s)" % () )
+                    line = [config_package['publisher'], config_package['package'], 
+                            content['name'],
+                            "%s (%s)" % (config_package['version'], latest_package['version'] ) ]
+                    table.append (line)
+
+                output_table (headings, table)
+
                 ans = raw_input( "Update packages [Y] ? ")
                 if ans == "" or ans.lower().startswith("y"):
                 #
@@ -1571,8 +1807,12 @@ class Kipi():
                         # remove current?
                         # remove_package (package)
                         self.package_url = config_package['url']
-                        self.remove (config_package['publisher'], config_package['package'])
-                        self.install (config_package['package_file'], latest_package['version'], "download,install")
+
+                        print ("Updating package %s, content %s" % (config_package['package'], content['name']) )
+
+                        err_code, files_to_remove = self.remove_package (config_package['publisher'], config_package['package'], content)
+
+                        self.install_package (config_package['package_file'], latest_package['version'], "download,install", content)
             else:
                 print ("No updates available")
         else:
@@ -1624,21 +1864,21 @@ class Kipi():
             actions = "update"
 
         #
-        kipi_config_folder = get_config_path("kipi")
+        kipi_config_folder = get_app_config_path("kipi")
         self.paths.kipi_config_filename = os.path.join (kipi_config_folder, "kipi.cfg")
 
         if os.path.exists(self.paths.kipi_config_filename):
-            self.config = read_config (self.paths.kipi_config_filename)
+            self.config = read_yml_config (self.paths.kipi_config_filename)
         else:
             self.config = None
 
         if args.config:
             if self.config is None:
                 self.config = {}
-                self.config ['default_package'] = "kicad-official-libraries-v5.yml"
+                #self.config ['default_package'] = "kicad-official-libraries-v5.yml"
             self.config ['cache_path'] = args.config # todo check/default?
             make_folder (kipi_config_folder)
-            write_config (self.paths.kipi_config_filename, self.config)
+            write_yml_config (self.paths.kipi_config_filename, self.config)
             return 0
 
         if not self.config:
@@ -1650,23 +1890,33 @@ class Kipi():
         self.paths.cache_dir = self.config['cache_path']
         self.default_package_file = self.config ['default_package']
 
-        self.paths.package_info_dir = os.path.join (self.paths.cache_dir, "packages")
+        self.paths.package_info_dir = os.path.join (self.paths.cache_dir, "_packages")
 
         self.paths.package_info_search_path = [".", self.paths.package_info_dir, "../packages"]
 
         user_documents = get_user_documents()
-        self.paths.kicad_config_dir = get_config_path("kicad")
+        self.paths.kicad_config_dir = get_app_config_path("kicad")
+
+        #todo: get from config
+        kicad_common = read_config_file (os.path.join (self.paths.kicad_config_dir, "kicad_common"))
 
         if 'KIGITHUB' in os.environ:
             self.paths.ki_github_url = os.environ['KIGITHUB']
+        else:
+            self.paths.ki_github_url = get_config_item (kicad_common, 'KIGITHUB')
 
         if 'KISYS3DMOD' in os.environ:
             self.paths.ki_packages3d_dir = os.environ['KISYS3DMOD']
+        else:
+            self.paths.ki_packages3d_dir = get_config_item (kicad_common, 'KISYS3DMOD')
 
         # also system templates?
         self.paths.ki_user_templates_dir = os.path.join(user_documents, "kicad", "template")
+
         if 'KICAD_PTEMPLATES' in os.environ:
             self.paths.ki_portable_templates_dir = os.environ['KICAD_PTEMPLATES']
+        else:
+            self.paths.ki_portable_templates_dir = get_config_item (kicad_common, 'KICAD_PTEMPLATES')
 
         self.paths.ki_user_scripts_dir = os.path.join(self.paths.kicad_config_dir, "scripting")
 
@@ -1691,7 +1941,7 @@ class Kipi():
             return 2
 
         if args.update:
-            err_code = self.update ()
+            err_code = self.update_package (None, args.package_spec)
 
         elif args.catalog:
             # 
@@ -1715,14 +1965,15 @@ class Kipi():
 
             #todo: may need to remove first
             if err_code == 0:
-                err_code = self.install(self.package_file, args.version, actions)
+                err_code = self.install_package(self.package_file, args.version, actions)
 
         elif args.remove:
 
-
             # remove any installed packages in pack_file
             # by publisher, name?
-            err_code = self.remove(None, args.package_spec)
+            err_code, files_to_remove = self.remove_package(None, args.package_spec)
+            if files_to_remove:
+                delete_files (files_to_remove)
 
         else:
             # print help
