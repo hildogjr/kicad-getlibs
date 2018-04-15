@@ -150,7 +150,7 @@ class Path ():
     def get_path (self, path):
         result = os.path.join (path, os.sep.join (self.parts))
         if self.filespec:
-            result += os.path.join (result, self.filespec)
+            result = os.path.join (result, self.filespec)
         return result
 
     def __str__ (self):
@@ -1148,6 +1148,10 @@ def install_content (paths, target_path, atype, afilter, publisher, package_name
         libs, dest_names = get_libs (target_path, ".wrl", afilter, False)
 
         result = get_libs (target_path, ".step", afilter, False)
+        libs.extend (result[0])
+        dest_names.extend(result[1])
+
+        result = get_libs (target_path, ".stp", afilter, False)
         libs.extend (result[0])
         dest_names.extend(result[1])
        
