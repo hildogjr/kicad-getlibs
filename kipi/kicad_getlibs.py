@@ -179,8 +179,8 @@ def get_app_config_path (appname):
     elif sys.platform == 'win32':
         appdata = os.path.join(os.environ['APPDATA'], appname)
     else:
-        # ~/.kicad
-        appdata = os.path.expanduser(os.path.join("~", "." + appname))
+        # ~/.config/kicad
+        appdata = os.path.expanduser(os.path.join("~", ".config", appname))
     return appdata
 
 def get_user_documents ():
